@@ -1,7 +1,7 @@
 .PHONY: serve test ios
 
 serve:
-	uv run --project services/api uvicorn somnia.main:create_app --factory --host 127.0.0.1 --port 8090
+	set -a; if [ -f .env ]; then . ./.env; fi; set +a; uv run --project services/api uvicorn somnia.main:create_app --factory --host 127.0.0.1 --port 8090
 
 test:
 	uv run --project services/api pytest

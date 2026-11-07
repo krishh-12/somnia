@@ -15,7 +15,7 @@ struct SomniaApp: App {
         tabs.configureWithOpaqueBackground()
         tabs.backgroundColor = background
         let muted = UIColor.white.withAlphaComponent(0.62)
-        let teal = UIColor(red: 0.36, green: 0.86, blue: 0.82, alpha: 1)
+        let teal = UIColor(red: 0.96, green: 0.62, blue: 0.76, alpha: 1)
         tabs.stackedLayoutAppearance.normal.iconColor = muted
         tabs.stackedLayoutAppearance.normal.titleTextAttributes = [.foregroundColor: muted]
         tabs.stackedLayoutAppearance.selected.iconColor = teal

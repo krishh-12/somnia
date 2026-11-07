@@ -1,4 +1,3 @@
-import Charts
 import SwiftUI
 
 struct HistoryView: View {
@@ -49,44 +48,46 @@ struct InsightsView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    NightCard {
-                        Text("Anomaly score")
-                            .font(.headline)
-                        Text("Isolation Forest on this patient’s normal baseline. A higher score is more unusual. It is not a seizure probability.")
-                            .font(.footnote)
-                            .foregroundStyle(Night.muted)
-                        if let threshold = model.live?.modelThreshold {
-                            Text(String(format: "Server threshold %.2f · baseline heart rate %.0f", threshold, model.live?.baselineHr ?? 0))
-                                .font(.footnote)
-                                .foregroundStyle(Night.teal)
-                                .padding(.top, 6)
+                    if let insights = model.insights {
+                        HStack(alignment: .top, spacing: 12) {
+                            countCard("Tonight", value: insights.tonightCount, caption: "anomalies")
+                            countCard("This week", value: insights.weekCount, caption: "anomalies")
                         }
-                    }
-                    NightCard {
-                        if let readings = model.live?.readings, readings.contains(where: { $0.score != nil }) {
-                            Chart(readings) { point in
-                                if let score = point.score {
-                                    AreaMark(
-                                        x: .value("Sample", point.index),
-                                        y: .value("Score", score)
-                                    )
-                                    .foregroundStyle(Night.indigo.opacity(0.28))
-                                    LineMark(
-                                        x: .value("Sample", point.index),
-                                        y: .value("Score", score)
-                                    )
-                                    .foregroundStyle(Night.indigo)
-                                    .interpolationMethod(.catmullRom)
-                                }
-                            }
-                            .chartYAxis { AxisMarks(position: .leading) }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 200)
-                        } else {
-                            Text("No scores yet")
+                        NightCard {
+                            Text("Most common time")
+                                .font(.subheadline)
                                 .foregroundStyle(Night.muted)
-                                .frame(maxWidth: .infinity, minHeight: 160, alignment: .center)
+                            Text(insights.commonTime ?? "Not enough yet")
+                                .font(.title2.weight(.semibold))
+                            Text(commonDetail(insights))
+                                .font(.footnote)
+                                .foregroundStyle(Night.muted)
                         }
+                        NightCard {
+                            Text("What may be going on")
+                                .font(.headline)
+                            Text(insights.cause)
+                                .foregroundStyle(Night.muted)
+                        }
+                        NightCard {
+                            Text("What to do")
+                                .font(.headline)
+                            Text(insights.action)
+                                .foregroundStyle(Night.muted)
+                        }
+                        if insights.narration == "vultr" {
+                            Text("This wording comes from a Vultr model. The counts and the anomaly score do not. This is not a diagnosis.")
+                                .font(.footnote)
+                                .foregroundStyle(Night.pink)
+                        }
+                        if insights.synthetic {
+                            Text("These counts come from saved synthetic nights. They are not a diagnosis.")
+                                .font(.footnote)
+                                .foregroundStyle(Night.muted)
+                        }
+                    } else {
+                        Text(model.status.isEmpty ? "Loading the night summary…" : model.status)
+                            .foregroundStyle(Night.muted)
                     }
                 }
                 .padding(20)
@@ -95,6 +96,30 @@ struct InsightsView: View {
             .navigationTitle("Insights")
             .navigationBarTitleDisplayMode(.inline)
         }
+    }
+
+    private func countCard(_ title: String, value: Int, caption: String) -> some View {
+        NightCard {
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(Night.muted)
+            Text("\(value)")
+                .font(.system(size: 40, weight: .semibold, design: .rounded))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(caption)
+                .font(.footnote)
+                .foregroundStyle(Night.teal)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func commonDetail(_ insights: NightInsights) -> String {
+        guard insights.hasData, insights.commonTimeCount > 0 else {
+            return "This fills in after the server saves an anomaly."
+        }
+        let noun = insights.commonTimeCount == 1 ? "anomaly" : "anomalies"
+        return "\(insights.commonTimeCount) \(noun) this week started in that hour."
     }
 }
 
@@ -124,7 +149,7 @@ struct ProfileView: View {
                             .padding(.vertical, 14)
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(Night.teal)
+                    .tint(Night.pink)
                     Button {
                         model.showWearable = true
                     } label: {

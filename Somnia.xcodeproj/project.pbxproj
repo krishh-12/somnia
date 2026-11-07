@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		276526585E0AF355110B5587 /* Sections.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFC6B9DF2198D0301E4B1D97 /* Sections.swift */; };
+		350D5A3E4C46F7540C8860A8 /* Logo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2A8056096A802C05AB8AA2 /* Logo.swift */; };
 		3AE213B2E6738B151C3B3174 /* API.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF17F783509ED48B491E1B07 /* API.swift */; };
 		414DAEF62FBF32663A76F0A8 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B038F7FCD375750C13D818B0 /* RootView.swift */; };
 		90648F27EB20D046EC2A2F10 /* DemoModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B41ADFDBCFD20D465A68E49 /* DemoModel.swift */; };
@@ -20,6 +21,7 @@
 		60DA8B61E1BCB82F7F75F4AA /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		6B41ADFDBCFD20D465A68E49 /* DemoModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoModel.swift; sourceTree = "<group>"; };
 		6CE153AB5B1F7A3F1CCDDBAE /* SomniaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SomniaApp.swift; sourceTree = "<group>"; };
+		7A2A8056096A802C05AB8AA2 /* Logo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logo.swift; sourceTree = "<group>"; };
 		9EC4B035877790A825092A25 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		B038F7FCD375750C13D818B0 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		CCBF63AD05A60E71DEC88484 /* Somnia.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Somnia.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -60,6 +62,7 @@
 				6B41ADFDBCFD20D465A68E49 /* DemoModel.swift */,
 				9EC4B035877790A825092A25 /* HomeView.swift */,
 				EFC574C6E9F89DAE38C1B922 /* Info.plist */,
+				7A2A8056096A802C05AB8AA2 /* Logo.swift */,
 				B038F7FCD375750C13D818B0 /* RootView.swift */,
 				EFC6B9DF2198D0301E4B1D97 /* Sections.swift */,
 				6CE153AB5B1F7A3F1CCDDBAE /* SomniaApp.swift */,
@@ -134,6 +137,7 @@
 				3AE213B2E6738B151C3B3174 /* API.swift in Sources */,
 				90648F27EB20D046EC2A2F10 /* DemoModel.swift in Sources */,
 				98393ED5A87CBCD0412949D2 /* HomeView.swift in Sources */,
+				350D5A3E4C46F7540C8860A8 /* Logo.swift in Sources */,
 				414DAEF62FBF32663A76F0A8 /* RootView.swift in Sources */,
 				276526585E0AF355110B5587 /* Sections.swift in Sources */,
 				A9732D8C4C6FB8D24671B729 /* SomniaApp.swift in Sources */,

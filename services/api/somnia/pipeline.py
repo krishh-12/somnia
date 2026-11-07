@@ -3,7 +3,7 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from somnia.ml import BASELINE_HR, FEATURE_VERSION, MODEL_SEED, anomaly_score, train_model
@@ -137,7 +137,12 @@ def run_case(db: Session, case: str, seed: int = MODEL_SEED) -> MonitoringSessio
         raise ValueError("case")
     patient = ensure_ready(db)
     cached = _cache(db)
-    started = utcnow() - timedelta(seconds=SECONDS)
+    from somnia.insights import place_on_night
+
+    prior = db.scalar(
+        select(func.count()).select_from(MonitoringSession).where(MonitoringSession.patient_id == patient.id)
+    ) or 0
+    started = place_on_night(patient, int(prior), utcnow())
     session = MonitoringSession(
         patient_id=patient.id,
         source="simulator",
@@ -154,7 +159,7 @@ def run_case(db: Session, case: str, seed: int = MODEL_SEED) -> MonitoringSessio
     open_event: Event | None = None
     for index in range(SECONDS):
         heart_rate, motion_rms, motion_var, quality, motion = synthesize_second(case, index, seed)
-        moment = started + timedelta(seconds=index)
+        moment = started + timedelta(minutes=index * 2)
         score = anomaly_score(cached.model, heart_rate, motion_rms, motion_var)
         features = {
             "hr": round(heart_rate, 3),
@@ -233,7 +238,7 @@ def run_case(db: Session, case: str, seed: int = MODEL_SEED) -> MonitoringSessio
             calm += 1
             if open_event is not None and open_event.ended_at is None and calm >= 3:
                 open_event.ended_at = moment
-    session.ended_at = started + timedelta(seconds=SECONDS - 1)
+    session.ended_at = started + timedelta(minutes=(SECONDS - 1) * 2)
     db.commit()
     return session
 

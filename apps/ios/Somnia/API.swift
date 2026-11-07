@@ -55,6 +55,18 @@ struct EventList: Decodable, Sendable {
     var events: [DemoEvent]
 }
 
+struct NightInsights: Decodable, Sendable {
+    var tonightCount: Int
+    var weekCount: Int
+    var commonTime: String?
+    var commonTimeCount: Int
+    var cause: String
+    var action: String
+    var narration: String?
+    var synthetic: Bool
+    var hasData: Bool
+}
+
 enum SomniaAPIError: Error {
     case offline
     case message(String)
@@ -74,6 +86,10 @@ struct SomniaAPI {
 
     func run(caseName: String) async throws -> LiveSnapshot {
         try await send(path: "/api/v1/demo/runs", method: "POST", body: ["case": caseName], authorize: true)
+    }
+
+    func insights() async throws -> NightInsights {
+        try await send(path: "/api/v1/insights", method: "GET", body: Optional<[String: String]>.none, authorize: true)
     }
 
     func events() async throws -> [DemoEvent] {

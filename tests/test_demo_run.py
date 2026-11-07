@@ -52,10 +52,50 @@ def test_motor_case_scores_and_alarms(tmp_path, monkeypatch) -> None:
 
     quiet = client.get("/api/v1/live", headers=headers)
     assert quiet.json()["active_event"] is None
+    summary = client.get("/api/v1/insights", headers=headers)
+    assert summary.status_code == 200, summary.text
+    insight = summary.json()
+    assert insight["tonight_count"] >= 1
+    assert insight["week_count"] >= insight["tonight_count"]
+    assert insight["common_time"]
+    assert "not a diagnosis" in insight["action"].lower()
     cleared = client.post("/api/v1/demo/reset", headers=headers)
     assert cleared.status_code == 200, cleared.text
     assert cleared.json()["readings"] == []
     assert cleared.json()["monitoring_title"] == "Not monitoring"
+    empty = client.get("/api/v1/insights", headers=headers).json()
+    assert empty["tonight_count"] == 0
+    assert empty["week_count"] == 0
+    assert empty["has_data"] is False
+    reset_engine()
+    reset_model_cache()
+
+
+def test_vultr_narration_replaces_the_rule_text(tmp_path, monkeypatch) -> None:
+    from somnia.narrate import clear_cache
+
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path}/somnia.db")
+    monkeypatch.setenv("VULTR_INFERENCE_API_KEY", "test-key")
+    monkeypatch.setattr(
+        "somnia.narrate._complete",
+        lambda prompt: (
+            "Movement and heart rate rose together around the same hour.",
+            "If you are safe, turn the alarm off",
+        ),
+    )
+    clear_cache()
+    reset_engine()
+    reset_model_cache()
+    client = TestClient(create_app())
+    token = client.post("/api/v1/demo/session", json={"role": "patient"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    motor = client.post("/api/v1/demo/runs", headers=headers, json={"case": "sustained_motor_event"})
+    assert motor.status_code == 200, motor.text
+    insight = client.get("/api/v1/insights", headers=headers).json()
+    assert insight["narration"] == "vultr"
+    assert "rose together" in insight["cause"]
+    assert "not a diagnosis" in insight["action"].lower()
+    clear_cache()
     reset_engine()
     reset_model_cache()
 

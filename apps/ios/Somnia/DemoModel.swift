@@ -10,6 +10,7 @@ final class DemoModel {
     var patientName = "Avery Quinn"
     var live: LiveSnapshot?
     var events: [DemoEvent] = []
+    var insights: NightInsights?
     var busy = false
     var status = ""
     var showWearable = false
@@ -65,6 +66,7 @@ final class DemoModel {
     func reload() async throws {
         live = try await api.live()
         events = try await api.events()
+        insights = try await api.insights()
     }
 
     func refresh() async {
@@ -88,6 +90,7 @@ final class DemoModel {
         do {
             live = try await api.run(caseName: caseName)
             events = try await api.events()
+            insights = try await api.insights()
             if alarm != nil {
                 showAlarmNotice = true
                 showAlarmScreen = true
@@ -125,6 +128,7 @@ final class DemoModel {
         do {
             live = try await api.reset()
             events = []
+            insights = try await api.insights()
             showAlarmNotice = false
             showAlarmScreen = false
         } catch SomniaAPIError.message(let text) {

@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from somnia.db import db_session
+from somnia.insights import build_insights
 from somnia.models import Event, FeatureWindow
 from somnia.pipeline import (
     acknowledge,
@@ -85,6 +86,18 @@ class LiveOut(BaseModel):
 
 class EventList(BaseModel):
     events: list[EventOut]
+
+
+class InsightsOut(BaseModel):
+    tonight_count: int
+    week_count: int
+    common_time: str | None
+    common_time_count: int
+    cause: str
+    action: str
+    narration: str = "rules"
+    synthetic: bool
+    has_data: bool
 
 
 def current_user(
@@ -203,6 +216,11 @@ def demo_reset(user=Depends(current_user), db: Session = Depends(db_session)) ->
         raise HTTPException(status_code=403, detail="Only the patient demo can reset saved readings")
     reset_demo_data(db)
     return snapshot(db)
+
+
+@router.get("/insights", response_model=InsightsOut)
+def insights(_user=Depends(current_user), db: Session = Depends(db_session)) -> InsightsOut:
+    return InsightsOut(**build_insights(db))
 
 
 @router.get("/events", response_model=EventList)

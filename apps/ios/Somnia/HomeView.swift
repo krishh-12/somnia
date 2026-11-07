@@ -41,8 +41,11 @@ struct PatientHome: View {
                     }
 
                     NightCard {
-                        Text("Graph")
+                        Text("Movement through the night")
                             .font(.headline)
+                        Text("Across is time of night. Up is stronger movement.")
+                            .font(.footnote)
+                            .foregroundStyle(Night.muted)
                         if readings.isEmpty {
                             Text("No readings yet")
                                 .foregroundStyle(Night.muted)
@@ -51,24 +54,35 @@ struct PatientHome: View {
                             Chart(readings) { point in
                                 if let motion = point.motionRms {
                                     LineMark(
-                                        x: .value("Sample", point.index),
-                                        y: .value("Motion", motion),
+                                        x: .value("Time of night", point.at),
+                                        y: .value("Motion (m/s²)", motion),
                                         series: .value("Run", point.run)
                                     )
                                     .foregroundStyle(Night.teal)
                                     .interpolationMethod(.catmullRom)
                                     if motion >= 1 {
                                         PointMark(
-                                            x: .value("Sample", point.index),
-                                            y: .value("Motion", motion)
+                                            x: .value("Time of night", point.at),
+                                            y: .value("Motion (m/s²)", motion)
                                         )
                                         .foregroundStyle(Night.danger)
                                         .symbolSize(40)
                                     }
                                 }
                             }
+                            .chartXAxisLabel("Time of night")
+                            .chartYAxisLabel("Motion (m/s²)")
+                            .chartXAxis {
+                                AxisMarks(values: .automatic(desiredCount: 3)) { value in
+                                    AxisGridLine()
+                                    AxisValueLabel {
+                                        if let date = value.as(Date.self) {
+                                            Text(date, format: .dateTime.hour().minute())
+                                        }
+                                    }
+                                }
+                            }
                             .chartYAxis { AxisMarks(position: .leading) }
-                            .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
                             .frame(maxWidth: .infinity)
                             .frame(height: 190)
                             Text("\(readings.count) saved samples. A new test extends this graph.")

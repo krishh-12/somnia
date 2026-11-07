@@ -2,15 +2,27 @@ import SwiftUI
 
 struct RootView: View {
     @Bindable var model: DemoModel
+    @State private var revealed = false
 
     var body: some View {
-        Group {
-            if model.token == nil {
-                WelcomeView(model: model)
-            } else if model.role == "caregiver" {
-                CaregiverHome(model: model)
-            } else {
-                PatientTabs(model: model)
+        ZStack {
+            Group {
+                if model.token == nil {
+                    WelcomeView(model: model)
+                } else if model.role == "caregiver" {
+                    CaregiverHome(model: model)
+                } else {
+                    PatientTabs(model: model)
+                }
+            }
+            .opacity(revealed ? 1 : 0)
+            if !revealed {
+                OpeningView {
+                    withAnimation(.easeInOut(duration: 0.55)) {
+                        revealed = true
+                    }
+                }
+                .transition(.opacity)
             }
         }
         .background(Night.background.ignoresSafeArea())
@@ -53,7 +65,7 @@ struct WelcomeView: View {
                     .font(.footnote)
                     .foregroundStyle(Night.danger)
             }
-            roleButton("Continue", role: "patient", tint: Night.teal)
+            roleButton("Continue", role: "patient", tint: Night.pink)
             Spacer()
         }
         .padding(24)
@@ -86,7 +98,7 @@ struct PatientTabs: View {
             ProfileView(model: model)
                 .tabItem { Label("Profile", systemImage: "person.fill") }
         }
-        .tint(Night.teal)
+        .tint(Night.pink)
     }
 }
 
@@ -97,6 +109,24 @@ struct CaregiverHome: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    Button {
+                        Task { await model.enter(role: "patient") }
+                    } label: {
+                        Text(model.busy ? "Returning…" : "Back to patient")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Night.pink)
+                    .disabled(model.busy)
+
+                    if !model.status.isEmpty {
+                        Text(model.status)
+                            .font(.footnote)
+                            .foregroundStyle(Night.danger)
+                    }
+
                     if let alarm = model.openAlarm {
                         NightCard {
                             Text("Alert")
@@ -138,21 +168,20 @@ struct CaregiverHome: View {
                             }
                         }
                     }
-
-                    Button("Back to patient") {
-                        Task { await model.enter(role: "patient") }
-                    }
-                    .font(.headline)
-                    .buttonStyle(.borderedProminent)
-                    .tint(Night.teal)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 8)
                 }
                 .padding(20)
             }
             .background(Night.background)
             .navigationTitle("Caregiver")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Patient") {
+                        Task { await model.enter(role: "patient") }
+                    }
+                    .disabled(model.busy)
+                }
+            }
         }
     }
 }

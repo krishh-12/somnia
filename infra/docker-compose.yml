@@ -11,14 +11,18 @@ services:
     build:
       context: ..
       dockerfile: infra/Dockerfile
+    env_file:
+      - path: ../.env
+        required: false
     environment:
       DATABASE_URL: postgresql+psycopg://somnia:somnia@db:5432/somnia
+      VULTR_INFERENCE_MODEL: ${VULTR_INFERENCE_MODEL:-qwen3.8-flash-next}
     depends_on:
       - db
   caddy:
     image: caddy:2.11-alpine
     ports:
-      - "127.0.0.1:8090:8080"
+      - "8090:8080"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:
