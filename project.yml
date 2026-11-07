@@ -1,0 +1,47 @@
+name: Somnia
+options:
+  bundleIdPrefix: com.somnia
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    ALWAYS_SEARCH_USER_PATHS: "NO"
+    CODE_SIGNING_ALLOWED: "YES"
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGN_IDENTITY: "-"
+  configs:
+    Debug:
+      ONLY_ACTIVE_ARCH: "YES"
+targets:
+  Somnia:
+    type: application
+    platform: iOS
+    sources:
+      - path: apps/ios/Somnia
+    info:
+      path: apps/ios/Somnia/Info.plist
+      properties:
+        CFBundleDisplayName: Somnia
+        UILaunchScreen: {}
+        SomniaAPIBaseURL: http://127.0.0.1:8090
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.somnia.app
+        PRODUCT_NAME: Somnia
+        SDKROOT: iphoneos
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+        TARGETED_DEVICE_FAMILY: "1"
+        MARKETING_VERSION: "0.2.0"
+        CURRENT_PROJECT_VERSION: "1"
+schemes:
+  Somnia:
+    build:
+      targets:
+        Somnia: all

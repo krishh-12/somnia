@@ -1,0 +1,28 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: somnia
+      POSTGRES_PASSWORD: somnia
+      POSTGRES_DB: somnia
+    volumes:
+      - somnia2_pg:/var/lib/postgresql/data
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://somnia:somnia@db:5432/somnia
+    depends_on:
+      - db
+  caddy:
+    image: caddy:2.11-alpine
+    ports:
+      - "127.0.0.1:8090:8080"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - api
+
+volumes:
+  somnia2_pg:
