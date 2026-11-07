@@ -7,23 +7,33 @@ struct RootView: View {
         Group {
             if model.token == nil {
                 WelcomeView(model: model)
+            } else if model.role == "caregiver" {
+                CaregiverHome(model: model)
             } else {
-                MainTabView(model: model)
+                PatientTabs(model: model)
             }
         }
         .background(Night.background.ignoresSafeArea())
-        .fullScreenCover(item: alarmBinding) { event in
-            AlarmView(event: event, busy: model.busy) {
-                Task { await model.acknowledge() }
+        .task {
+            if model.token == nil {
+                await model.enter(role: "patient")
             }
         }
-    }
-
-    private var alarmBinding: Binding<DemoEvent?> {
-        Binding(
-            get: { model.alarm },
-            set: { _ in }
-        )
+        .alert("Possible seizure-like event", isPresented: $model.showAlarmNotice) {
+            Button("Turn off") { Task { await model.acknowledge() } }
+            Button("Not now", role: .cancel) {}
+        } message: {
+            Text("If you do not turn this off, Somnia will notify your caregiver and physician.")
+        }
+        .fullScreenCover(isPresented: $model.showAlarmScreen) {
+            if let event = model.alarm {
+                AlarmView(event: event, busy: model.busy) {
+                    Task { await model.acknowledge() }
+                } onDismiss: {
+                    model.showAlarmScreen = false
+                }
+            }
+        }
     }
 }
 
@@ -43,9 +53,7 @@ struct WelcomeView: View {
                     .font(.footnote)
                     .foregroundStyle(Night.danger)
             }
-            roleButton("Patient", role: "patient", tint: Night.teal)
-            roleButton("Caregiver", role: "caregiver", tint: Night.indigo)
-            roleButton("Physician", role: "physician", tint: Night.indigo)
+            roleButton("Continue", role: "patient", tint: Night.teal)
             Spacer()
         }
         .padding(24)
@@ -66,20 +74,85 @@ struct WelcomeView: View {
     }
 }
 
-struct MainTabView: View {
+struct PatientTabs: View {
     @Bindable var model: DemoModel
 
     var body: some View {
         TabView {
-            HomeView(model: model)
+            PatientHome(model: model)
                 .tabItem { Label("Home", systemImage: "moon.stars.fill") }
-            HistoryView(model: model)
-                .tabItem { Label("History", systemImage: "clock.fill") }
             InsightsView(model: model)
                 .tabItem { Label("Insights", systemImage: "waveform.path.ecg") }
             ProfileView(model: model)
                 .tabItem { Label("Profile", systemImage: "person.fill") }
         }
         .tint(Night.teal)
+    }
+}
+
+struct CaregiverHome: View {
+    @Bindable var model: DemoModel
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let alarm = model.openAlarm {
+                        NightCard {
+                            Text("Alert")
+                                .font(.title2.weight(.semibold))
+                                .foregroundStyle(Night.danger)
+                            Text("Avery has not turned off a possible seizure-like event.")
+                            Text("If it stays on, the caregiver and physician are the people Somnia says it will notify.")
+                                .foregroundStyle(Night.muted)
+                            if let score = alarm.scorePeak {
+                                Text(String(format: "Peak anomaly score %.2f", score))
+                                    .font(.footnote)
+                                    .foregroundStyle(Night.teal)
+                            }
+                        }
+                    } else {
+                        NightCard {
+                            Text("No active alert")
+                                .font(.title3.weight(.semibold))
+                            Text("Avery has no alarm waiting to be turned off.")
+                                .foregroundStyle(Night.muted)
+                        }
+                    }
+
+                    Text("Recent anomalies")
+                        .font(.headline)
+                    if model.events.isEmpty {
+                        Text("None saved yet.")
+                            .foregroundStyle(Night.muted)
+                    } else {
+                        ForEach(model.events) { event in
+                            NightCard {
+                                Text(event.kind == "alarm" ? "Possible seizure-like event" : "Heart-rate observation")
+                                    .font(.headline)
+                                Text(event.reason)
+                                    .foregroundStyle(Night.muted)
+                                Text(event.alarmStatus.replacingOccurrences(of: "_", with: " "))
+                                    .font(.footnote)
+                                    .foregroundStyle(Night.teal)
+                            }
+                        }
+                    }
+
+                    Button("Back to patient") {
+                        Task { await model.enter(role: "patient") }
+                    }
+                    .font(.headline)
+                    .buttonStyle(.borderedProminent)
+                    .tint(Night.teal)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 8)
+                }
+                .padding(20)
+            }
+            .background(Night.background)
+            .navigationTitle("Caregiver")
+            .navigationBarTitleDisplayMode(.inline)
+        }
     }
 }

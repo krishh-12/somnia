@@ -13,9 +13,10 @@ from somnia.pipeline import (
     active_alarm,
     aware,
     ensure_ready,
+    compounded_readings,
     latest_session,
     open_demo_session,
-    readings_for,
+    reset_demo_data,
     run_case,
     user_for_token,
 )
@@ -42,6 +43,8 @@ class SessionOut(BaseModel):
 
 
 class ReadingOut(BaseModel):
+    index: int
+    run: int
     sequence: int
     at: datetime
     heart_rate_bpm: float | None
@@ -116,9 +119,11 @@ def _event_out(event: Event) -> EventOut:
     )
 
 
-def _reading(window: FeatureWindow) -> ReadingOut:
+def _reading(index: int, run: int, window: FeatureWindow) -> ReadingOut:
     features = window.features or {}
     return ReadingOut(
+        index=index,
+        run=run,
         sequence=window.sequence,
         at=aware(window.window_end),
         heart_rate_bpm=features.get("hr"),
@@ -131,17 +136,17 @@ def _reading(window: FeatureWindow) -> ReadingOut:
 def snapshot(db: Session) -> LiveOut:
     patient = ensure_ready(db)
     session = latest_session(db)
-    windows = readings_for(db, session.id) if session is not None else []
+    rows = compounded_readings(db)
     alarm = active_alarm(db)
-    has_readings = bool(windows)
+    has_readings = bool(rows)
     if has_readings:
         title = "Monitoring Active"
         monitoring = "simulation_active"
-        detail = "Synthetic wearable readings were scored on the server."
+        detail = "Each test adds to this graph. Reset clears it."
     else:
         title = "Not monitoring"
         monitoring = "idle"
-        detail = "Run a synthetic test. No wearable is connected."
+        detail = "The graph is empty until a test is scored."
     from somnia.pipeline import _model
 
     return LiveOut(
@@ -156,7 +161,7 @@ def snapshot(db: Session) -> LiveOut:
         model_threshold=None if _model is None else _model.threshold,
         demo_case=None if session is None else session.demo_case,
         synthetic=True if session is None else session.synthetic,
-        readings=[_reading(window) for window in windows],
+        readings=[_reading(index, run, window) for index, (run, window) in enumerate(rows)],
         active_event=None if alarm is None else _event_out(alarm),
     )
 
@@ -187,6 +192,16 @@ def demo_run(body: RunBody, user=Depends(current_user), db: Session = Depends(db
     if body.case not in CASES:
         raise HTTPException(status_code=422, detail="Unknown test case")
     run_case(db, body.case)
+    return snapshot(db)
+
+
+@router.post("/demo/reset", response_model=LiveOut)
+def demo_reset(user=Depends(current_user), db: Session = Depends(db_session)) -> LiveOut:
+    from fastapi import HTTPException
+
+    if user.role != "patient":
+        raise HTTPException(status_code=403, detail="Only the patient demo can reset saved readings")
+    reset_demo_data(db)
     return snapshot(db)
 
 

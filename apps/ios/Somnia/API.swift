@@ -9,6 +9,8 @@ struct DemoSession: Decodable, Sendable {
 }
 
 struct ReadingPoint: Decodable, Identifiable, Sendable {
+    var index: Int
+    var run: Int
     var sequence: Int
     var at: Date
     var heartRateBpm: Double?
@@ -16,7 +18,7 @@ struct ReadingPoint: Decodable, Identifiable, Sendable {
     var score: Double?
     var quality: String
 
-    var id: Int { sequence }
+    var id: Int { index }
 }
 
 struct DemoEvent: Decodable, Identifiable, Equatable, Sendable {
@@ -81,6 +83,10 @@ struct SomniaAPI {
 
     func acknowledge(id: UUID) async throws -> DemoEvent {
         try await send(path: "/api/v1/events/\(id.uuidString)/acknowledge", method: "POST", body: Optional<[String: String]>.none, authorize: true)
+    }
+
+    func reset() async throws -> LiveSnapshot {
+        try await send(path: "/api/v1/demo/reset", method: "POST", body: Optional<[String: String]>.none, authorize: true)
     }
 
     private func send<Response: Decodable>(

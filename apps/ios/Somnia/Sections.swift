@@ -67,35 +67,33 @@ struct InsightsView: View {
                             Chart(readings) { point in
                                 if let score = point.score {
                                     AreaMark(
-                                        x: .value("Second", point.sequence),
+                                        x: .value("Sample", point.index),
                                         y: .value("Score", score)
                                     )
-                                    .foregroundStyle(Night.indigo.opacity(0.35))
+                                    .foregroundStyle(Night.indigo.opacity(0.28))
                                     LineMark(
-                                        x: .value("Second", point.sequence),
+                                        x: .value("Sample", point.index),
                                         y: .value("Score", score)
                                     )
                                     .foregroundStyle(Night.indigo)
+                                    .interpolationMethod(.catmullRom)
                                 }
                             }
-                            .frame(height: 180)
+                            .chartYAxis { AxisMarks(position: .leading) }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 200)
                         } else {
-                            Text("No scored windows yet. Run a test from Home.")
+                            Text("No scores yet")
                                 .foregroundStyle(Night.muted)
-                                .frame(maxWidth: .infinity, minHeight: 120, alignment: .leading)
+                                .frame(maxWidth: .infinity, minHeight: 160, alignment: .center)
                         }
-                    }
-                    NightCard {
-                        Text("Plan and physician review")
-                            .font(.headline)
-                        Text("Not in this version. The next section saves a caregiver escalation and a physician review on these same events.")
-                            .foregroundStyle(Night.muted)
                     }
                 }
                 .padding(20)
             }
             .background(Night.background)
             .navigationTitle("Insights")
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 }
@@ -117,21 +115,22 @@ struct ProfileView: View {
                             .foregroundStyle(Night.muted)
                             .padding(.top, 6)
                     }
-                    NightCard {
-                        Text("Demo view")
+                    Button {
+                        Task { await model.enter(role: "caregiver") }
+                    } label: {
+                        Text("Switch to caregiver")
                             .font(.headline)
-                        Text("Switching view does not create another patient.")
-                            .font(.footnote)
-                            .foregroundStyle(Night.muted)
-                        viewButton("Patient", role: "patient")
-                        viewButton("Caregiver", role: "caregiver")
-                        viewButton("Physician", role: "physician")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
                     }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Night.teal)
                     Button {
                         model.showWearable = true
                     } label: {
                         Label(model.live?.wearableLabel ?? "Wearable import not connected", systemImage: "applewatch")
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 8)
                     }
                     .buttonStyle(.bordered)
                     .tint(Night.indigo)
@@ -141,24 +140,17 @@ struct ProfileView: View {
                     Button("Leave demo", role: .destructive) {
                         model.leave()
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(20)
             }
             .background(Night.background)
             .navigationTitle("Profile")
+            .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $model.showWearable) {
                 WearableSheet()
             }
         }
-    }
-
-    private func viewButton(_ title: String, role: String) -> some View {
-        Button(title) {
-            Task { await model.enter(role: role) }
-        }
-        .buttonStyle(.bordered)
-        .tint(model.role == role ? Night.teal : Night.indigo)
-        .padding(.top, 6)
     }
 }
 
@@ -166,33 +158,37 @@ struct AlarmView: View {
     let event: DemoEvent
     let busy: Bool
     let acknowledge: () -> Void
+    let onDismiss: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
+            Text("Alarm")
+                .font(.system(size: 40, weight: .semibold, design: .rounded))
             Text("Possible seizure-like event")
-                .font(.system(size: 36, weight: .semibold, design: .rounded))
-            Text(event.reason)
+                .font(.title2)
+            Text("If you do not turn this off, Somnia will notify your caregiver and physician.")
                 .font(.title3)
-            if let score = event.scorePeak {
-                Text(String(format: "Peak anomaly score %.2f", score))
-                    .foregroundStyle(Night.teal)
-            }
-            Text("Synthetic test. Acknowledging means you are safe. It does not label the event as not a seizure.")
+            Text(event.reason)
                 .foregroundStyle(Night.muted)
-            if let deadline = event.deadlineAt {
-                Text("Server deadline \(deadline.formatted(date: .omitted, time: .standard))")
-                    .font(.footnote)
-                    .foregroundStyle(Night.muted)
-            }
+            Text("Turning this off means you are safe. It does not decide whether the pattern was a seizure.")
+                .font(.footnote)
+                .foregroundStyle(Night.muted)
             Spacer()
-            Button(busy ? "Saving…" : "I’m safe") {
-                acknowledge()
+            Button(action: acknowledge) {
+                Text(busy ? "Saving…" : "Turn off")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
             }
-            .font(.headline)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 18)
             .buttonStyle(.borderedProminent)
             .tint(Night.teal)
+            .disabled(busy)
+            Button(action: onDismiss) {
+                Text("Not now")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+            }
             .disabled(busy)
         }
         .padding(24)

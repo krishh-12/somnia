@@ -31,6 +31,8 @@ def test_motor_case_scores_and_alarms(tmp_path, monkeypatch) -> None:
     assert body["synthetic"] is True
     motor_peak = max(item["score"] for item in body["readings"])
     assert motor_peak > normal_peak
+    assert len(body["readings"]) == 32
+    assert [item["index"] for item in body["readings"]] == list(range(32))
     event = body["active_event"]
     assert event is not None
     assert event["kind"] == "alarm"
@@ -50,6 +52,10 @@ def test_motor_case_scores_and_alarms(tmp_path, monkeypatch) -> None:
 
     quiet = client.get("/api/v1/live", headers=headers)
     assert quiet.json()["active_event"] is None
+    cleared = client.post("/api/v1/demo/reset", headers=headers)
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["readings"] == []
+    assert cleared.json()["monitoring_title"] == "Not monitoring"
     reset_engine()
     reset_model_cache()
 

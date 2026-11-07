@@ -3,7 +3,7 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from somnia.ml import BASELINE_HR, FEATURE_VERSION, MODEL_SEED, anomaly_score, train_model
@@ -248,6 +248,22 @@ def readings_for(db: Session, session_id: uuid.UUID) -> list[FeatureWindow]:
             select(FeatureWindow).where(FeatureWindow.session_id == session_id).order_by(FeatureWindow.sequence)
         ).all()
     )
+
+
+def compounded_readings(db: Session) -> list[tuple[int, FeatureWindow]]:
+    sessions = db.scalars(select(MonitoringSession).order_by(MonitoringSession.started_at, MonitoringSession.id)).all()
+    rows: list[tuple[int, FeatureWindow]] = []
+    for run_index, session in enumerate(sessions):
+        for window in readings_for(db, session.id):
+            rows.append((run_index, window))
+    return rows
+
+
+def reset_demo_data(db: Session) -> None:
+    ensure_ready(db)
+    for table in (Event, FeatureWindow, SensorBatch, MonitoringSession):
+        db.execute(delete(table))
+    db.commit()
 
 
 def active_alarm(db: Session) -> Event | None:

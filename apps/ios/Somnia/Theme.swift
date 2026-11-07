@@ -14,9 +14,11 @@ struct NightCard<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        content
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Night.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        VStack(alignment: .leading, spacing: 8) {
+            content
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Night.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 }

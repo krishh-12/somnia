@@ -13,6 +13,9 @@ final class DemoModel {
     var busy = false
     var status = ""
     var showWearable = false
+    var showAlarmNotice = false
+    var showAlarmScreen = false
+    var confirmReset = false
 
     var baseURL: URL {
         if let raw = Bundle.main.object(forInfoDictionaryKey: "SomniaAPIBaseURL") as? String,
@@ -24,9 +27,13 @@ final class DemoModel {
 
     var isPatient: Bool { role == "patient" }
 
-    var alarm: DemoEvent? {
-        guard isPatient, let event = live?.activeEvent, event.alarmStatus == "awaiting_ack" else { return nil }
+    var openAlarm: DemoEvent? {
+        guard let event = live?.activeEvent, event.alarmStatus == "awaiting_ack" else { return nil }
         return event
+    }
+
+    var alarm: DemoEvent? {
+        isPatient ? openAlarm : nil
     }
 
     private var api: SomniaAPI { SomniaAPI(baseURL: baseURL, token: token) }
@@ -40,6 +47,10 @@ final class DemoModel {
             self.role = session.role
             displayName = session.displayName
             patientName = session.patientName
+            if role != "patient" {
+                showAlarmNotice = false
+                showAlarmScreen = false
+            }
             try await reload()
         } catch SomniaAPIError.offline {
             status = "The iPhone cannot reach the Somnia service at \(baseURL.host ?? "the server"). Start it, then try again."
@@ -77,6 +88,10 @@ final class DemoModel {
         do {
             live = try await api.run(caseName: caseName)
             events = try await api.events()
+            if alarm != nil {
+                showAlarmNotice = true
+                showAlarmScreen = true
+            }
         } catch SomniaAPIError.offline {
             status = "The test could not reach the server."
         } catch SomniaAPIError.message(let text) {
@@ -93,10 +108,29 @@ final class DemoModel {
         do {
             _ = try await api.acknowledge(id: alarm.id)
             try await reload()
+            showAlarmNotice = false
+            showAlarmScreen = false
         } catch SomniaAPIError.message(let text) {
             status = text
         } catch {
-            status = "Acknowledgement was not saved."
+            status = "The alarm could not be turned off."
+        }
+        busy = false
+    }
+
+    func resetData() async {
+        guard isPatient else { return }
+        busy = true
+        status = ""
+        do {
+            live = try await api.reset()
+            events = []
+            showAlarmNotice = false
+            showAlarmScreen = false
+        } catch SomniaAPIError.message(let text) {
+            status = text
+        } catch {
+            status = "The saved graph could not be cleared."
         }
         busy = false
     }
