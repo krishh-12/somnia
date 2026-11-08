@@ -25,16 +25,18 @@ targets:
       path: apps/ios/Somnia/Info.plist
       properties:
         CFBundleDisplayName: Somnia
+        CFBundleIconName: AppIcon
         UILaunchScreen: {}
-        SomniaAPIBaseURL: http://127.0.0.1:8090
+        SomniaAPIBaseURL: http://149.28.253.209:8090
         NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.somnia.app
         PRODUCT_NAME: Somnia
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SDKROOT: iphoneos
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
         TARGETED_DEVICE_FAMILY: "1"

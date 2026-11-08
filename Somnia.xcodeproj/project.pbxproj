@@ -11,6 +11,8 @@
 		350D5A3E4C46F7540C8860A8 /* Logo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2A8056096A802C05AB8AA2 /* Logo.swift */; };
 		3AE213B2E6738B151C3B3174 /* API.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF17F783509ED48B491E1B07 /* API.swift */; };
 		414DAEF62FBF32663A76F0A8 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B038F7FCD375750C13D818B0 /* RootView.swift */; };
+		5EBB580E809A1862009E67A5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9EAC47BFA24F084C279972BC /* Assets.xcassets */; };
+		64EA97ABC2C2439DCD8EFECD /* AlarmSignal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EC34C35476FDE3DB42ECA95 /* AlarmSignal.swift */; };
 		90648F27EB20D046EC2A2F10 /* DemoModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B41ADFDBCFD20D465A68E49 /* DemoModel.swift */; };
 		98393ED5A87CBCD0412949D2 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EC4B035877790A825092A25 /* HomeView.swift */; };
 		A9732D8C4C6FB8D24671B729 /* SomniaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CE153AB5B1F7A3F1CCDDBAE /* SomniaApp.swift */; };
@@ -22,6 +24,8 @@
 		6B41ADFDBCFD20D465A68E49 /* DemoModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoModel.swift; sourceTree = "<group>"; };
 		6CE153AB5B1F7A3F1CCDDBAE /* SomniaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SomniaApp.swift; sourceTree = "<group>"; };
 		7A2A8056096A802C05AB8AA2 /* Logo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logo.swift; sourceTree = "<group>"; };
+		9EAC47BFA24F084C279972BC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		9EC34C35476FDE3DB42ECA95 /* AlarmSignal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmSignal.swift; sourceTree = "<group>"; };
 		9EC4B035877790A825092A25 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		B038F7FCD375750C13D818B0 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		CCBF63AD05A60E71DEC88484 /* Somnia.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Somnia.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -58,7 +62,9 @@
 		6596C26D7CFFE27CC603BC8C /* Somnia */ = {
 			isa = PBXGroup;
 			children = (
+				9EC34C35476FDE3DB42ECA95 /* AlarmSignal.swift */,
 				CF17F783509ED48B491E1B07 /* API.swift */,
+				9EAC47BFA24F084C279972BC /* Assets.xcassets */,
 				6B41ADFDBCFD20D465A68E49 /* DemoModel.swift */,
 				9EC4B035877790A825092A25 /* HomeView.swift */,
 				EFC574C6E9F89DAE38C1B922 /* Info.plist */,
@@ -87,6 +93,7 @@
 			buildConfigurationList = DA9CB86FA1311C9BAEACCE4C /* Build configuration list for PBXNativeTarget "Somnia" */;
 			buildPhases = (
 				30185E7A5CE73704D757E354 /* Sources */,
+				9620D599546CC5B0871EA51D /* Resources */,
 			);
 			buildRules = (
 			);
@@ -129,12 +136,24 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		9620D599546CC5B0871EA51D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5EBB580E809A1862009E67A5 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		30185E7A5CE73704D757E354 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				3AE213B2E6738B151C3B3174 /* API.swift in Sources */,
+				64EA97ABC2C2439DCD8EFECD /* AlarmSignal.swift in Sources */,
 				90648F27EB20D046EC2A2F10 /* DemoModel.swift in Sources */,
 				98393ED5A87CBCD0412949D2 /* HomeView.swift in Sources */,
 				350D5A3E4C46F7540C8860A8 /* Logo.swift in Sources */,
@@ -165,6 +184,7 @@
 		3B9BDB7800D959E9115DC786 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = apps/ios/Somnia/Info.plist;
 				MARKETING_VERSION = 0.2.0;
@@ -179,6 +199,7 @@
 		975E0BDEC28178443C7269B1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = apps/ios/Somnia/Info.plist;
 				MARKETING_VERSION = 0.2.0;

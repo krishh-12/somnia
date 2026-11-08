@@ -55,6 +55,15 @@ struct EventList: Decodable, Sendable {
     var events: [DemoEvent]
 }
 
+struct EventFeedback: Decodable, Sendable {
+    var id: UUID
+    var eventId: UUID
+    var label: String
+    var phrase: String
+    var note: String
+    var reviewStatus: String
+}
+
 struct NightInsights: Decodable, Sendable {
     var tonightCount: Int
     var weekCount: Int
@@ -99,6 +108,15 @@ struct SomniaAPI {
 
     func acknowledge(id: UUID) async throws -> DemoEvent {
         try await send(path: "/api/v1/events/\(id.uuidString)/acknowledge", method: "POST", body: Optional<[String: String]>.none, authorize: true)
+    }
+
+    func feedback(id: UUID, label: String, note: String) async throws -> EventFeedback {
+        try await send(
+            path: "/api/v1/events/\(id.uuidString)/feedback",
+            method: "POST",
+            body: ["label": label, "note": note],
+            authorize: true
+        )
     }
 
     func reset() async throws -> LiveSnapshot {

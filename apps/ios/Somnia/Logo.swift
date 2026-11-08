@@ -9,7 +9,7 @@ struct SomniaLogo: View {
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
             let radius = min(size.width, size.height) * 0.32
             let pink = Color(red: 0.96, green: 0.62, blue: 0.76)
-            let teal = Color(red: 0.36, green: 0.86, blue: 0.82)
+            let pulseColor = Color(red: 1.0, green: 0.86, blue: 0.91)
 
             var glow = Path()
             glow.addEllipse(in: CGRect(
@@ -54,7 +54,7 @@ struct SomniaLogo: View {
             }
             context.stroke(
                 pulse,
-                with: .color(teal.opacity(0.35 + 0.65 * settled)),
+                with: .color(pulseColor.opacity(0.45 + 0.55 * settled)),
                 style: StrokeStyle(lineWidth: radius * 0.07, lineCap: .round, lineJoin: .round)
             )
         }
@@ -77,7 +77,7 @@ struct OpeningView: View {
                     .frame(width: 168, height: 168)
                     .scaleEffect(0.92 + settled * 0.08)
                 Text("Somnia")
-                    .font(.system(size: 34, weight: .semibold, design: .rounded))
+                    .font(.somnia(size: 34, weight: .semibold))
                     .foregroundStyle(Night.pink.opacity(title ? 1 : 0))
             }
         }

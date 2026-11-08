@@ -14,16 +14,18 @@ final class DemoModel {
     var busy = false
     var status = ""
     var showWearable = false
-    var showAlarmNotice = false
-    var showAlarmScreen = false
+    var presentedAlarm: DemoEvent?
+    var alarmRaisedThisSession = false
     var confirmReset = false
+    var showFeedback = false
+    var feedbackEventId: UUID?
 
     var baseURL: URL {
         if let raw = Bundle.main.object(forInfoDictionaryKey: "SomniaAPIBaseURL") as? String,
            let url = URL(string: raw) {
             return url
         }
-        return URL(string: "http://127.0.0.1:8090")!
+        return URL(string: "http://149.28.253.209:8090")!
     }
 
     var isPatient: Bool { role == "patient" }
@@ -48,10 +50,10 @@ final class DemoModel {
             self.role = session.role
             displayName = session.displayName
             patientName = session.patientName
-            if role != "patient" {
-                showAlarmNotice = false
-                showAlarmScreen = false
-            }
+            presentedAlarm = nil
+            alarmRaisedThisSession = false
+            showFeedback = false
+            feedbackEventId = nil
             try await reload()
         } catch SomniaAPIError.offline {
             status = "The iPhone cannot reach the Somnia service at \(baseURL.host ?? "the server"). Start it, then try again."
@@ -87,14 +89,12 @@ final class DemoModel {
         guard isPatient else { return }
         busy = true
         status = ""
+        var raised: DemoEvent?
         do {
             live = try await api.run(caseName: caseName)
             events = try await api.events()
             insights = try await api.insights()
-            if alarm != nil {
-                showAlarmNotice = true
-                showAlarmScreen = true
-            }
+            raised = alarm
         } catch SomniaAPIError.offline {
             status = "The test could not reach the server."
         } catch SomniaAPIError.message(let text) {
@@ -103,22 +103,59 @@ final class DemoModel {
             status = "The test did not finish."
         }
         busy = false
+        if let raised {
+            alarmRaisedThisSession = true
+            presentedAlarm = raised
+        }
     }
 
     func acknowledge() async {
-        guard let alarm else { return }
+        let eventId = presentedAlarm?.id ?? alarm?.id
+        guard let eventId else { return }
+        let coverWasOpen = presentedAlarm != nil
         busy = true
         do {
-            _ = try await api.acknowledge(id: alarm.id)
+            _ = try await api.acknowledge(id: eventId)
             try await reload()
-            showAlarmNotice = false
-            showAlarmScreen = false
+            alarmRaisedThisSession = false
+            presentedAlarm = nil
+            status = ""
+            feedbackEventId = eventId
+            if coverWasOpen {
+                Task {
+                    try? await Task.sleep(for: .milliseconds(450))
+                    showFeedback = true
+                }
+            } else {
+                showFeedback = true
+            }
         } catch SomniaAPIError.message(let text) {
             status = text
         } catch {
             status = "The alarm could not be turned off."
         }
         busy = false
+    }
+
+    func sendFeedback(label: String, note: String) async -> Bool {
+        guard let feedbackEventId else { return false }
+        busy = true
+        status = ""
+        let trimmed = String(note.prefix(280)).trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            _ = try await api.feedback(id: feedbackEventId, label: label, note: trimmed)
+            try await reload()
+            showFeedback = false
+            self.feedbackEventId = nil
+            busy = false
+            return true
+        } catch SomniaAPIError.message(let text) {
+            status = text
+        } catch {
+            status = "The note could not be saved."
+        }
+        busy = false
+        return false
     }
 
     func resetData() async {
@@ -129,8 +166,10 @@ final class DemoModel {
             live = try await api.reset()
             events = []
             insights = try await api.insights()
-            showAlarmNotice = false
-            showAlarmScreen = false
+            alarmRaisedThisSession = false
+            presentedAlarm = nil
+            showFeedback = false
+            feedbackEventId = nil
         } catch SomniaAPIError.message(let text) {
             status = text
         } catch {
@@ -145,5 +184,7 @@ final class DemoModel {
         live = nil
         events = []
         status = ""
+        presentedAlarm = nil
+        alarmRaisedThisSession = false
     }
 }

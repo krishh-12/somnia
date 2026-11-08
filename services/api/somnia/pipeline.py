@@ -14,10 +14,18 @@ from somnia.models import (
     ModelVersion,
     MonitoringSession,
     Patient,
+    Review,
     SensorBatch,
     User,
 )
+
 from somnia.signals import CASES, SECONDS, synthesize_second
+
+FEEDBACK_LABELS = {
+    "turning_over": "I was turning over",
+    "awake": "I was awake",
+    "unsure": "I'm not sure",
+}
 
 ACK_SECONDS = 20
 PATIENT_ID = uuid.UUID("11111111-1111-4111-8111-111111111111")
@@ -266,7 +274,7 @@ def compounded_readings(db: Session) -> list[tuple[int, FeatureWindow]]:
 
 def reset_demo_data(db: Session) -> None:
     ensure_ready(db)
-    for table in (Event, FeatureWindow, SensorBatch, MonitoringSession):
+    for table in (Review, Event, FeatureWindow, SensorBatch, MonitoringSession):
         db.execute(delete(table))
     db.commit()
 
@@ -289,3 +297,27 @@ def acknowledge(db: Session, event_id: uuid.UUID) -> Event | None:
         event.review_status = "unreviewed"
         db.commit()
     return event
+
+
+def record_patient_feedback(
+    db: Session,
+    event_id: uuid.UUID,
+    author_name: str,
+    label: str,
+    note: str,
+) -> Review | None:
+    event = db.get(Event, event_id)
+    if event is None or label not in FEEDBACK_LABELS:
+        return None
+    cleaned = " ".join(note.split())[:280]
+    existing = db.scalar(select(Review).where(Review.event_id == event.id))
+    if existing is None:
+        existing = Review(event_id=event.id, author_name=author_name, label=label, note=cleaned)
+        db.add(existing)
+    else:
+        existing.author_name = author_name
+        existing.label = label
+        existing.note = cleaned
+    event.review_status = "patient_noted"
+    db.commit()
+    return existing

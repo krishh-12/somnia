@@ -31,20 +31,14 @@ struct RootView: View {
                 await model.enter(role: "patient")
             }
         }
-        .alert("Possible seizure-like event", isPresented: $model.showAlarmNotice) {
-            Button("Turn off") { Task { await model.acknowledge() } }
-            Button("Not now", role: .cancel) {}
-        } message: {
-            Text("If you do not turn this off, Somnia will notify your caregiver and physician.")
-        }
-        .fullScreenCover(isPresented: $model.showAlarmScreen) {
-            if let event = model.alarm {
-                AlarmView(event: event, busy: model.busy) {
-                    Task { await model.acknowledge() }
-                } onDismiss: {
-                    model.showAlarmScreen = false
-                }
+        .fullScreenCover(item: $model.presentedAlarm) { event in
+            AlarmView(event: event, busy: model.busy) {
+                Task { await model.acknowledge() }
             }
+            .interactiveDismissDisabled(true)
+        }
+        .sheet(isPresented: $model.showFeedback) {
+            FeedbackSheet(model: model)
         }
     }
 }
@@ -56,13 +50,13 @@ struct WelcomeView: View {
         VStack(alignment: .leading, spacing: 22) {
             Spacer()
             Text("Somnia")
-                .font(.system(size: 44, weight: .semibold, design: .rounded))
+                .font(.somnia(size: 44, weight: .semibold))
             Text("A nighttime prototype for one synthetic patient. It does not diagnose seizures or replace medical care.")
-                .font(.body)
+                .font(.somnia(.body))
                 .foregroundStyle(Night.muted)
             if !model.status.isEmpty {
                 Text(model.status)
-                    .font(.footnote)
+                    .font(.somnia(.footnote))
                     .foregroundStyle(Night.danger)
             }
             roleButton("Continue", role: "patient", tint: Night.pink)
@@ -76,7 +70,7 @@ struct WelcomeView: View {
             Task { await model.enter(role: role) }
         } label: {
             Text(model.busy ? "Opening…" : title)
-                .font(.headline)
+                .font(.somnia(.headline, weight: .semibold))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
         }
@@ -113,7 +107,7 @@ struct CaregiverHome: View {
                         Task { await model.enter(role: "patient") }
                     } label: {
                         Text(model.busy ? "Returning…" : "Back to patient")
-                            .font(.headline)
+                            .font(.somnia(.headline, weight: .semibold))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
                     }
@@ -123,35 +117,35 @@ struct CaregiverHome: View {
 
                     if !model.status.isEmpty {
                         Text(model.status)
-                            .font(.footnote)
+                            .font(.somnia(.footnote))
                             .foregroundStyle(Night.danger)
                     }
 
                     if let alarm = model.openAlarm {
                         NightCard {
                             Text("Alert")
-                                .font(.title2.weight(.semibold))
+                                .font(.somnia(.title2, weight: .semibold))
                                 .foregroundStyle(Night.danger)
                             Text("Avery has not turned off a possible seizure-like event.")
                             Text("If it stays on, the caregiver and physician are the people Somnia says it will notify.")
                                 .foregroundStyle(Night.muted)
                             if let score = alarm.scorePeak {
                                 Text(String(format: "Peak anomaly score %.2f", score))
-                                    .font(.footnote)
-                                    .foregroundStyle(Night.teal)
+                                    .font(.somnia(.footnote))
+                                    .foregroundStyle(Night.pink)
                             }
                         }
                     } else {
                         NightCard {
                             Text("No active alert")
-                                .font(.title3.weight(.semibold))
+                                .font(.somnia(.title3, weight: .semibold))
                             Text("Avery has no alarm waiting to be turned off.")
                                 .foregroundStyle(Night.muted)
                         }
                     }
 
                     Text("Recent anomalies")
-                        .font(.headline)
+                        .font(.somnia(.headline, weight: .semibold))
                     if model.events.isEmpty {
                         Text("None saved yet.")
                             .foregroundStyle(Night.muted)
@@ -159,12 +153,12 @@ struct CaregiverHome: View {
                         ForEach(model.events) { event in
                             NightCard {
                                 Text(event.kind == "alarm" ? "Possible seizure-like event" : "Heart-rate observation")
-                                    .font(.headline)
+                                    .font(.somnia(.headline, weight: .semibold))
                                 Text(event.reason)
                                     .foregroundStyle(Night.muted)
                                 Text(event.alarmStatus.replacingOccurrences(of: "_", with: " "))
-                                    .font(.footnote)
-                                    .foregroundStyle(Night.teal)
+                                    .font(.somnia(.footnote))
+                                    .foregroundStyle(Night.pink)
                             }
                         }
                     }

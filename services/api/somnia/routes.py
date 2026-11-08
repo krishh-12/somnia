@@ -10,6 +10,7 @@ from somnia.db import db_session
 from somnia.insights import build_insights
 from somnia.models import Event, FeatureWindow
 from somnia.pipeline import (
+    FEEDBACK_LABELS,
     acknowledge,
     active_alarm,
     aware,
@@ -17,6 +18,7 @@ from somnia.pipeline import (
     compounded_readings,
     latest_session,
     open_demo_session,
+    record_patient_feedback,
     reset_demo_data,
     run_case,
     user_for_token,
@@ -32,6 +34,11 @@ class DemoBody(BaseModel):
 
 class RunBody(BaseModel):
     case: str
+
+
+class FeedbackBody(BaseModel):
+    label: str = Field(pattern="^(turning_over|awake|unsure)$")
+    note: str = ""
 
 
 class SessionOut(BaseModel):
@@ -88,9 +95,26 @@ class EventList(BaseModel):
     events: list[EventOut]
 
 
+class FeedbackOut(BaseModel):
+    id: uuid.UUID
+    event_id: uuid.UUID
+    label: str
+    phrase: str
+    note: str
+    review_status: str
+
+
 class InsightsOut(BaseModel):
     tonight_count: int
     week_count: int
+    tonight_alarms: int = 0
+    tonight_observations: int = 0
+    week_alarms: int = 0
+    week_observations: int = 0
+    turned_off_count: int = 0
+    waiting_count: int = 0
+    peak_score: float | None = None
+    sleep_window: str = ""
     common_time: str | None
     common_time_count: int
     cause: str
@@ -239,3 +263,30 @@ def ack(event_id: uuid.UUID, user=Depends(current_user), db: Session = Depends(d
     if event is None:
         raise HTTPException(status_code=404, detail="Event not found")
     return _event_out(event)
+
+
+@router.post("/events/{event_id}/feedback", response_model=FeedbackOut)
+def feedback(
+    event_id: uuid.UUID,
+    body: FeedbackBody,
+    user=Depends(current_user),
+    db: Session = Depends(db_session),
+) -> FeedbackOut:
+    from fastapi import HTTPException
+
+    if user.role != "patient":
+        raise HTTPException(status_code=403, detail="The patient demo view records what was happening")
+    if len(body.note) > 280:
+        raise HTTPException(status_code=422, detail="The note is limited to 280 characters")
+    saved = record_patient_feedback(db, event_id, user.display_name, body.label, body.note)
+    if saved is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    event = db.get(Event, event_id)
+    return FeedbackOut(
+        id=saved.id,
+        event_id=saved.event_id,
+        label=saved.label,
+        phrase=FEEDBACK_LABELS[saved.label],
+        note=saved.note,
+        review_status=event.review_status if event is not None else "patient_noted",
+    )

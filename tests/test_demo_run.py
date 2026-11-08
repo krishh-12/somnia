@@ -58,6 +58,8 @@ def test_motor_case_scores_and_alarms(tmp_path, monkeypatch) -> None:
     assert insight["tonight_count"] >= 1
     assert insight["week_count"] >= insight["tonight_count"]
     assert insight["common_time"]
+    assert insight["week_alarms"] >= 1
+    assert insight["sleep_window"]
     assert "not a diagnosis" in insight["action"].lower()
     cleared = client.post("/api/v1/demo/reset", headers=headers)
     assert cleared.status_code == 200, cleared.text
@@ -96,6 +98,44 @@ def test_vultr_narration_replaces_the_rule_text(tmp_path, monkeypatch) -> None:
     assert "rose together" in insight["cause"]
     assert "not a diagnosis" in insight["action"].lower()
     clear_cache()
+    reset_engine()
+    reset_model_cache()
+
+
+def test_patient_feedback_is_saved_and_does_not_change_the_score(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path}/somnia.db")
+    reset_engine()
+    reset_model_cache()
+    client = TestClient(create_app())
+    patient = client.post("/api/v1/demo/session", json={"role": "patient"}).json()["access_token"]
+    caregiver = client.post("/api/v1/demo/session", json={"role": "caregiver"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {patient}"}
+    motor = client.post("/api/v1/demo/runs", headers=headers, json={"case": "sustained_motor_event"})
+    event = motor.json()["active_event"]
+    before = event["score_peak"]
+    client.post(f"/api/v1/events/{event['id']}/acknowledge", headers=headers)
+    saved = client.post(
+        f"/api/v1/events/{event['id']}/feedback",
+        headers=headers,
+        json={"label": "turning_over", "note": "I rolled onto my side"},
+    )
+    assert saved.status_code == 200, saved.text
+    body = saved.json()
+    assert body["label"] == "turning_over"
+    assert body["phrase"] == "I was turning over"
+    assert body["note"] == "I rolled onto my side"
+    assert body["review_status"] == "patient_noted"
+    events = client.get("/api/v1/events", headers=headers).json()["events"]
+    assert events[0]["score_peak"] == before
+    assert events[0]["review_status"] == "patient_noted"
+    denied = client.post(
+        f"/api/v1/events/{event['id']}/feedback",
+        headers={"Authorization": f"Bearer {caregiver}"},
+        json={"label": "awake", "note": ""},
+    )
+    assert denied.status_code == 403
+    cleared = client.post("/api/v1/demo/reset", headers=headers)
+    assert cleared.status_code == 200, cleared.text
     reset_engine()
     reset_model_cache()
 

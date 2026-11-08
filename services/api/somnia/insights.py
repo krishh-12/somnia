@@ -67,6 +67,11 @@ def build_insights(db: Session, now: datetime | None = None) -> dict:
         common_hour = min(hour for hour, count in hours.items() if count == common_count)
     alarms = sum(1 for event in week if event.kind == "alarm")
     observations = sum(1 for event in week if event.kind == "observation")
+    tonight_alarms = sum(1 for event in tonight if event.kind == "alarm")
+    tonight_observations = sum(1 for event in tonight if event.kind == "observation")
+    turned_off = sum(1 for event in week if event.acknowledged_at is not None)
+    waiting = sum(1 for event in week if event.alarm_status == "awaiting_ack")
+    peaks = [event.score_peak for event in week if event.score_peak is not None]
     common_time = None if common_hour is None else f"Around {_hour_label(common_hour)}"
     cause, action, narration = phrase(
         alarms=alarms,
@@ -79,6 +84,14 @@ def build_insights(db: Session, now: datetime | None = None) -> dict:
     return {
         "tonight_count": len(tonight),
         "week_count": len(week),
+        "tonight_alarms": tonight_alarms,
+        "tonight_observations": tonight_observations,
+        "week_alarms": alarms,
+        "week_observations": observations,
+        "turned_off_count": turned_off,
+        "waiting_count": waiting,
+        "peak_score": None if not peaks else round(max(peaks), 2),
+        "sleep_window": f"{patient.sleep_start}–{patient.sleep_end}",
         "common_time": common_time,
         "common_time_count": common_count,
         "cause": cause,

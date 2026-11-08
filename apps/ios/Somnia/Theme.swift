@@ -1,5 +1,16 @@
 import SwiftUI
 
+extension Font {
+    /// New York, the system serif. It reads softer than the default interface face and fits a night app.
+    static func somnia(_ style: Font.TextStyle, weight: Font.Weight = .regular) -> Font {
+        .system(style, design: .serif).weight(weight)
+    }
+
+    static func somnia(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight, design: .serif)
+    }
+}
+
 enum Night {
     static let background = Color(red: 0.04, green: 0.06, blue: 0.12)
     static let card = Color(red: 0.09, green: 0.12, blue: 0.20)
