@@ -285,3 +285,34 @@ def test_heart_rate_only_is_an_observation(tmp_path, monkeypatch) -> None:
     assert events[0]["alarm_status"] == "not_required"
     reset_engine()
     reset_model_cache()
+
+
+def test_vultr_cutoff_estimates_stay_inside_the_demo(monkeypatch) -> None:
+    from somnia.narrate import _parse_bars, clear_cache, compile_bars
+
+    monkeypatch.delenv("VULTR_INFERENCE_API_KEY", raising=False)
+    clear_cache()
+    rules = compile_bars()
+    assert rules.source == "rules"
+    assert rules.motion_bar == 3.5
+    assert rules.heart_rate_bar == 74.4
+    assert "not a diagnosis" in rules.note.lower()
+    wild = _parse_bars(
+        '{"motion_m_s2": 9, "heart_rate_rise": 0.9, "hrv_ms": 2, "note": "wild"}',
+        62,
+    )
+    assert wild is not None
+    assert wild.source == "vultr"
+    assert wild.motion_bar == 4.8
+    assert wild.heart_rate_bar == round(62 * 1.45, 2)
+    assert wild.hrv_bar == 18.0
+    assert "estimate" in wild.note.lower()
+    kept = _parse_bars(
+        '{"motion_m_s2": 3.2, "heart_rate_rise": 0.25, "hrv_ms": 22, '
+        '"note": "These are estimates from the study ranges. This is not a diagnosis."}',
+        62,
+    )
+    assert kept is not None
+    assert kept.motion_bar == 3.2
+    assert kept.heart_rate_bar == round(62 * 1.25, 2)
+    assert kept.note.startswith("These are estimates")

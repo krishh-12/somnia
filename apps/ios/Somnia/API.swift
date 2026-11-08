@@ -48,6 +48,9 @@ struct LiveSnapshot: Decodable, Sendable {
     var modelThreshold: Double?
     var motionBar: Double?
     var heartRateBar: Double?
+    var hrvBar: Double?
+    var barSource: String?
+    var barNote: String?
     var demoCase: String?
     var synthetic: Bool
     var readings: [ReadingPoint]

@@ -6,8 +6,10 @@ struct PatientHome: View {
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    Color.clear.frame(height: 0).id("night-top")
                     NightCard {
                         HStack(alignment: .center, spacing: 14) {
                             SomniaLogo(draw: 1, settled: 1)
@@ -105,7 +107,7 @@ struct PatientHome: View {
                             .chartYAxis { AxisMarks(position: .leading) }
                             .frame(maxWidth: .infinity)
                             .frame(height: 190)
-                            ReadMore(text: "\(readings.count) saved samples. A new test extends this graph. Every third one is the seizure-like pattern. Red points also need heart rate at least 20% above baseline, the low end of the 20–70% rise used in cardiac seizure detection. A 2013 wrist-accelerometer study flagged convulsive seizures when strong movement kept going. A turn stays under the line. This is not a diagnosis.")
+                            ReadMore(text: "\(readings.count) saved samples. A new test extends this graph. Every third one is the seizure-like pattern. Red points also need heart rate at least 20% above baseline, the low end of the 20–70% rise used in cardiac seizure detection. A 2013 wrist-accelerometer study flagged convulsive seizures when strong movement kept going. A turn stays under the line. \(barNote)")
                         }
                     }
 
@@ -121,6 +123,11 @@ struct PatientHome: View {
                                 .frame(maxWidth: .infinity, minHeight: 160, alignment: .center)
                         } else {
                             Chart {
+                                if let line = model.live?.hrvBar {
+                                    RuleMark(y: .value("Reduced variability", line))
+                                        .foregroundStyle(Night.danger.opacity(0.85))
+                                        .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+                                }
                                 ForEach(readings) { point in
                                     if let variability = point.hrvRmssd {
                                         LineMark(
@@ -156,7 +163,7 @@ struct PatientHome: View {
                             .chartYAxis { AxisMarks(position: .leading) }
                             .frame(maxWidth: .infinity)
                             .frame(height: 190)
-                            ReadMore(text: "Red points are the seizure-like pattern: movement stays strong and heart rate is up, while variability drops. A turn keeps variability near the resting range. Wearable studies of convulsive seizures often report a heart-rate rise together with a fall in variability, measured as RMSSD (Jeppesen et al., Epilepsia, 2015). This graph is synthetic. It is not a diagnosis.")
+                            ReadMore(text: "Red points are the seizure-like pattern: movement stays strong and heart rate is up, while variability drops. A turn keeps variability near the resting range. Wearable studies of convulsive seizures often report a heart-rate rise together with a fall in variability, measured as RMSSD (Jeppesen et al., Epilepsia, 2015). The dashed line is the compiled variability estimate. This graph is synthetic. \(barNote)")
                         }
                     }
 
@@ -179,6 +186,7 @@ struct PatientHome: View {
                     }
                     .buttonStyle(NeuButtonStyle())
                     .disabled(model.busy || readings.isEmpty)
+                    .opacity(model.busy || readings.isEmpty ? 0.4 : 1)
 
                     Button {
                         model.showWearable = true
@@ -201,14 +209,22 @@ struct PatientHome: View {
                 }
                 .padding(20)
             }
+            .onChange(of: readings.isEmpty) { _, empty in
+                if empty {
+                    withAnimation(Night.reveal) {
+                        proxy.scrollTo("night-top", anchor: .top)
+                    }
+                }
+            }
+            }
             .background(Night.background)
             .navigationTitle("somnia")
             .navigationBarTitleDisplayMode(.inline)
-            .confirmationDialog("Reset the saved graph?", isPresented: $model.confirmReset, titleVisibility: .visible) {
+            .alert("Reset the saved night?", isPresented: $model.confirmReset) {
                 Button("Reset data", role: .destructive) { Task { await model.resetData() } }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This clears the graph, the alarms, and the log on the server.")
+                Text("This clears the graph, the alarms, and the log.")
             }
             .sheet(isPresented: $model.showWearable) {
                 WearableSheet()
@@ -219,6 +235,9 @@ struct PatientHome: View {
     private var readings: [ReadingPoint] { model.live?.readings ?? [] }
     private var motionBar: Double { model.live?.motionBar ?? 3.5 }
     private var heartBar: Double { model.live?.heartRateBar ?? (model.live?.baselineHr ?? 62) * 1.2 }
+    private var barNote: String {
+        model.live?.barNote ?? "These lines are estimates, not a published cutoff. This is not a diagnosis."
+    }
 
     /// The 3rd, 6th, and 9th saved runs are the seizure-like pattern. The others rotate.
     private var nextCase: String {

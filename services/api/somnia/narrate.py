@@ -1,12 +1,130 @@
 import json
 import os
+from dataclasses import dataclass
+
 import urllib.request
 
+from somnia.ml import BASELINE_HR
+from somnia.signals import HR_RISE, MOTION_BAR
+
 _cache: dict[tuple, tuple[str, str]] = {}
+_bars: "NightBars | None" = None
+
+_STUDY_NOTES = (
+    "Sources for an estimate, not printed cutoffs. "
+    "Cardiac seizure detection uses a heart-rate rise of about 20–70% from rest. "
+    "Beniczky et al., Epilepsia 2013: a wrist accelerometer flags convulsive seizures when strong "
+    "rhythmic movement continues, not one turn. A brief turn is near 2.3 m/s² and a sustained "
+    "pattern is near 5.4 m/s². No paper prints a single m/s² line. "
+    "Jeppesen et al., Epilepsia 2015: wearable RMSSD often falls during convulsive seizures. "
+    "There is no published millisecond cutoff. Rest here is near 46–50 ms, and a seizure-like "
+    "window is near 12–16 ms."
+)
+
+
+@dataclass(frozen=True)
+class NightBars:
+    motion_bar: float
+    heart_rate_bar: float
+    hrv_bar: float
+    note: str
+    source: str
 
 
 def clear_cache() -> None:
+    global _bars
     _cache.clear()
+    _bars = None
+
+
+def fallback_bars(baseline: float = BASELINE_HR) -> NightBars:
+    return NightBars(
+        motion_bar=MOTION_BAR,
+        heart_rate_bar=round(baseline * (1 + HR_RISE), 2),
+        hrv_bar=20.0,
+        note=(
+            "These lines are the service fallback. They are estimates, not a published cutoff. "
+            "This is not a diagnosis."
+        ),
+        source="rules",
+    )
+
+
+def compile_bars(baseline: float = BASELINE_HR) -> NightBars:
+    """Vultr compiles the study ranges into the lines the night uses. A bad reply keeps the fallback."""
+    global _bars
+    if _bars is not None and _bars.source == "vultr":
+        return _bars
+    fallback = fallback_bars(baseline)
+    if not os.environ.get("VULTR_INFERENCE_API_KEY", "").strip():
+        return fallback
+    written = _complete_bars(baseline)
+    if written is None:
+        return fallback
+    _bars = written
+    return written
+
+
+def _complete_bars(baseline: float) -> NightBars | None:
+    system = (
+        "Compile cutoff estimates for a night screen from the sources in the user message. "
+        "The numbers are your estimates inside the stated ranges. They are not published cutoffs. "
+        "Return JSON with keys motion_m_s2, heart_rate_rise, hrv_ms, note. "
+        "motion_m_s2 is between a brief turn and sustained movement. "
+        "heart_rate_rise is a fraction from 0.20 to 0.70. "
+        "hrv_ms is an RMSSD below which variability looks reduced. "
+        "note is one sentence with no digits. It must say these are estimates and include the exact words "
+        '"This is not a diagnosis." Do not say seizure. seizure-like is allowed.'
+    )
+    prompt = f"Resting heart rate is {baseline:.0f} bpm. {_STUDY_NOTES}"
+    for _ in range(2):
+        content = _post_chat(prompt, system, 1000)
+        if content is None:
+            continue
+        parsed = _parse_bars(content, baseline)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _parse_bars(content: str, baseline: float) -> NightBars | None:
+    data = _load_json(content)
+    if not isinstance(data, dict):
+        return None
+    try:
+        motion = float(data["motion_m_s2"])
+        rise = float(data["heart_rate_rise"])
+        hrv = float(data["hrv_ms"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    motion = min(4.8, max(2.8, motion))
+    rise = min(0.45, max(0.20, rise))
+    hrv = min(36.0, max(18.0, hrv))
+    return NightBars(
+        motion_bar=round(motion, 2),
+        heart_rate_bar=round(baseline * (1 + rise), 2),
+        hrv_bar=round(hrv, 1),
+        note=_bar_note(str(data.get("note", ""))),
+        source="vultr",
+    )
+
+
+def _bar_note(text: str) -> str:
+    cleaned = " ".join(text.split())
+    lowered = cleaned.lower()
+    bare = lowered.replace("seizure-like", "")
+    if (
+        not cleaned
+        or any(character.isdigit() for character in cleaned)
+        or "seizure" in bare
+        or "estimate" not in lowered
+        or "not a diagnosis" not in lowered
+    ):
+        return (
+            "Vultr compiled these lines from the study ranges. They are estimates, not a published cutoff. "
+            "This is not a diagnosis."
+        )
+    return cleaned
 
 
 def rule_lines(alarms: int, observations: int, has_week: bool) -> tuple[str, str]:
@@ -48,16 +166,18 @@ def phrase(
     cached = _cache.get(cache_key)
     if cached is not None:
         return (*cached, "vultr")
+    bars = compile_bars()
     written = _complete(
         "Tonight anomalies: {tonight}. Anomalies in the last 7 days: {week}. "
         "Most common hour: {hour}. Alarms with movement and a higher heart rate: {alarms}. "
         "Heart-rate observations without that movement: {observations}. "
-        "These readings are synthetic demo data.".format(
+        "These readings are synthetic demo data. Cutoff note, do not add numbers: {note}".format(
             tonight=tonight,
             week=week,
             hour=common_time or "unknown",
             alarms=alarms,
             observations=observations,
+            note=bars.note,
         )
     )
     if written is None:
@@ -80,6 +200,7 @@ def _with_limit(lines: tuple[str, str]) -> tuple[str, str]:
 def _complete(prompt: str) -> tuple[str, str] | None:
     system = (
         "Summarize only the counts in the user message for a prototype screen. "
+        "The cutoff note was compiled from study ranges and is an estimate, not a published cutoff. "
         "Do not invent heart rates, times, medications, pain, anxiety, or care that was given. "
         "Do not say seizure. seizure-like is allowed. "
         'Return JSON with keys "cause" and "action". '
@@ -138,7 +259,7 @@ def _post_chat(prompt: str, system: str, max_tokens: int) -> str | None:
     return text or None
 
 
-def _parse(content: str) -> tuple[str, str] | None:
+def _load_json(content: str) -> dict | None:
     text = content.strip()
     if text.startswith("```"):
         text = text.strip("`")
@@ -154,6 +275,13 @@ def _parse(content: str) -> tuple[str, str] | None:
             data = json.loads(text[start : end + 1])
         except json.JSONDecodeError:
             return None
+    return data if isinstance(data, dict) else None
+
+
+def _parse(content: str) -> tuple[str, str] | None:
+    data = _load_json(content)
+    if data is None:
+        return None
     cause = str(data.get("cause", "")).strip()
     action = str(data.get("action", "")).strip()
     if not cause or not action or not _plain_summary(cause, action):
@@ -202,6 +330,7 @@ def describe_event(
         f"Required likely label: {fallback[0]}. "
         f"Heart rate: {heart_rate:.0f} bpm. Heart-rate variability: {hrv_rmssd:.0f} ms RMSSD. "
         f"Motion: {motion_rms:.2f}. Peak anomaly score: {score:.2f}. Synthetic demo reading. "
+        f"Cutoff note, do not add numbers: {compile_bars().note} "
         "The screen already shows those measurements. Do not include digits."
     )
     if written is None or written[0] != fallback[0]:

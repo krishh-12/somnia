@@ -20,8 +20,8 @@ from somnia.models import (
     SensorBatch,
     User,
 )
-from somnia.narrate import describe_event
-from somnia.signals import CASES, HR_RISE, MOTION_BAR, SECONDS, TURN_MOTION, estimate_hrv, heart_rate_bar, synthesize_second
+from somnia.narrate import NightBars, compile_bars, describe_event
+from somnia.signals import CASES, SECONDS, TURN_MOTION, estimate_hrv, synthesize_second
 
 FEEDBACK_LABELS = {
     "turning_over": "I was turning over",
@@ -171,6 +171,7 @@ def run_case(db: Session, case: str, seed: int = MODEL_SEED) -> MonitoringSessio
     db.add(session)
     db.flush()
 
+    bars = compile_bars(patient.baseline_hr)
     streak = 0
     calm = 0
     hr_streak = 0
@@ -213,8 +214,8 @@ def run_case(db: Session, case: str, seed: int = MODEL_SEED) -> MonitoringSessio
         )
         windows.append(window)
         db.add(window)
-        qualifying = motion_rms >= MOTION_BAR and heart_rate >= BASELINE_HR * (1 + HR_RISE)
-        hr_only = heart_rate >= heart_rate_bar(BASELINE_HR) and motion_rms < MOTION_BAR
+        qualifying = motion_rms >= bars.motion_bar and heart_rate >= bars.heart_rate_bar
+        hr_only = heart_rate >= bars.heart_rate_bar and motion_rms < bars.motion_bar
         if qualifying:
             streak += 1
             calm = 0
@@ -259,7 +260,7 @@ def run_case(db: Session, case: str, seed: int = MODEL_SEED) -> MonitoringSessio
             if open_event is not None and open_event.ended_at is None and calm >= 3:
                 open_event.ended_at = moment
     session.ended_at = started + timedelta(minutes=(SECONDS - 1) * 2)
-    _save_run_log(db, session, open_event, windows)
+    _save_run_log(db, session, open_event, windows, bars)
     db.commit()
     return session
 
@@ -297,16 +298,19 @@ def _sample(window: FeatureWindow) -> tuple[float, float, float] | None:
     return float(heart_rate), float(motion_rms), float(hrv)
 
 
-def characteristic(windows: list[FeatureWindow]) -> tuple[FeatureWindow, str, float, float, float] | None:
+def characteristic(
+    windows: list[FeatureWindow], bars: NightBars | None = None
+) -> tuple[FeatureWindow, str, float, float, float] | None:
     """One profile for a run, chosen from its measurements. Quiet sleep returns nothing."""
+    resolved = bars or compile_bars()
     rows = [(window, sample) for window in windows if (sample := _sample(window)) is not None]
     if not rows:
         return None
-    seizure = [row for row in rows if row[1][1] >= MOTION_BAR and row[1][0] >= heart_rate_bar()]
+    seizure = [row for row in rows if row[1][1] >= resolved.motion_bar and row[1][0] >= resolved.heart_rate_bar]
     if seizure:
         window, (heart_rate, motion_rms, hrv) = max(seizure, key=lambda row: row[1][1])
         return window, "seizure_like", heart_rate, motion_rms, hrv
-    if max(row[1][0] for row in rows) >= heart_rate_bar():
+    if max(row[1][0] for row in rows) >= resolved.heart_rate_bar:
         window, (heart_rate, motion_rms, hrv) = max(rows, key=lambda row: row[1][0])
         return window, "heart_rate", heart_rate, motion_rms, hrv
     if max(row[1][1] for row in rows) >= TURN_MOTION:
@@ -315,8 +319,10 @@ def characteristic(windows: list[FeatureWindow]) -> tuple[FeatureWindow, str, fl
     return None
 
 
-def _save_run_log(db: Session, session: MonitoringSession, event: Event | None, windows: list[FeatureWindow]) -> None:
-    found = characteristic(windows)
+def _save_run_log(
+    db: Session, session: MonitoringSession, event: Event | None, windows: list[FeatureWindow], bars: NightBars
+) -> None:
+    found = characteristic(windows, bars)
     if found is None:
         return
     window, kind, heart_rate, motion_rms, hrv = found

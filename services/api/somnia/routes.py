@@ -24,7 +24,7 @@ from somnia.pipeline import (
     run_case,
     user_for_token,
 )
-from somnia.signals import CASES, MOTION_BAR, case_for_click, estimate_hrv, heart_rate_bar
+from somnia.signals import CASES, MOTION_BAR, case_for_click, estimate_hrv
 
 router = APIRouter(prefix="/api/v1")
 
@@ -89,6 +89,9 @@ class LiveOut(BaseModel):
     model_threshold: float | None
     motion_bar: float = MOTION_BAR
     heart_rate_bar: float = 0
+    hrv_bar: float = 20
+    bar_source: str = "rules"
+    bar_note: str = ""
     demo_case: str | None
     synthetic: bool
     readings: list[ReadingOut]
@@ -212,8 +215,10 @@ def snapshot(db: Session) -> LiveOut:
         title = "Not monitoring"
         monitoring = "idle"
         detail = "The graph is empty until a test is scored."
+    from somnia.narrate import compile_bars
     from somnia.pipeline import _model
 
+    bars = compile_bars(patient.baseline_hr)
     return LiveOut(
         patient_name=patient.display_name,
         sleep_window=f"{patient.sleep_start}–{patient.sleep_end} {patient.timezone}",
@@ -224,8 +229,11 @@ def snapshot(db: Session) -> LiveOut:
         wearable_label="Wearable import not connected",
         baseline_hr=patient.baseline_hr,
         model_threshold=None if _model is None else _model.threshold,
-        motion_bar=MOTION_BAR,
-        heart_rate_bar=round(heart_rate_bar(patient.baseline_hr), 2),
+        motion_bar=bars.motion_bar,
+        heart_rate_bar=bars.heart_rate_bar,
+        hrv_bar=bars.hrv_bar,
+        bar_source=bars.source,
+        bar_note=bars.note,
         demo_case=None if session is None else session.demo_case,
         synthetic=True if session is None else session.synthetic,
         readings=[_reading(index, run, window) for index, (run, window) in enumerate(rows)],

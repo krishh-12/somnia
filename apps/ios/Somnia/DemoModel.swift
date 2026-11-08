@@ -166,6 +166,7 @@ final class DemoModel {
 
     func resetData() async {
         guard isPatient else { return }
+        confirmReset = false
         busy = true
         status = ""
         do {
