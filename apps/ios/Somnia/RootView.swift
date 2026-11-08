@@ -59,13 +59,13 @@ struct WelcomeView: View {
                     .font(.somnia(.footnote))
                     .foregroundStyle(Night.danger)
             }
-            roleButton("Continue", role: "patient", tint: Night.pink)
+            roleButton("Continue", role: "patient")
             Spacer()
         }
         .padding(24)
     }
 
-    private func roleButton(_ title: String, role: String, tint: Color) -> some View {
+    private func roleButton(_ title: String, role: String) -> some View {
         Button {
             Task { await model.enter(role: role) }
         } label: {
@@ -74,8 +74,7 @@ struct WelcomeView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(tint)
+        .buttonStyle(NeuButtonStyle(prominent: true))
         .disabled(model.busy)
     }
 }
@@ -113,8 +112,7 @@ struct CaregiverHome: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Night.pink)
+                    .buttonStyle(NeuButtonStyle(prominent: true))
                     .disabled(model.busy)
 
                     if !model.status.isEmpty {
@@ -128,7 +126,7 @@ struct CaregiverHome: View {
                             Text("Alert")
                                 .font(.somnia(.title2, weight: .semibold))
                                 .foregroundStyle(Night.danger)
-                            Text("Avery has not turned off a possible seizure-like event.")
+                            Text("Krish has not turned off a possible seizure-like event.")
                             Text("If it stays on, the caregiver and physician are the people somnia says it will notify.")
                                 .foregroundStyle(Night.muted)
                             if let score = alarm.scorePeak {
@@ -141,7 +139,7 @@ struct CaregiverHome: View {
                         NightCard {
                             Text("No active alert")
                                 .font(.somnia(.title3, weight: .semibold))
-                            Text("Avery has no alarm waiting to be turned off.")
+                            Text("Krish has no alarm waiting to be turned off.")
                                 .foregroundStyle(Night.muted)
                         }
                     }

@@ -4,14 +4,12 @@ import UIKit
 @main
 struct SomniaApp: App {
     init() {
-        let background = UIColor(red: 0.04, green: 0.06, blue: 0.12, alpha: 1)
+        let background = Night.uiBackground
         let navigation = UINavigationBarAppearance()
         navigation.configureWithOpaqueBackground()
         navigation.backgroundColor = background
-        let titleFont = UIFont.systemFont(ofSize: 17, weight: .semibold).fontDescriptor.withDesign(.rounded)
-            .map { UIFont(descriptor: $0, size: 17) } ?? UIFont.systemFont(ofSize: 17, weight: .semibold)
-        let tabFont = UIFont.systemFont(ofSize: 10, weight: .medium).fontDescriptor.withDesign(.rounded)
-            .map { UIFont(descriptor: $0, size: 10) } ?? UIFont.systemFont(ofSize: 10, weight: .medium)
+        let titleFont = Night.face(size: 17, weight: 600)
+        let tabFont = Night.face(size: 10, weight: 520)
         navigation.titleTextAttributes = [.foregroundColor: UIColor.white, .font: titleFont]
         UINavigationBar.appearance().standardAppearance = navigation
         UINavigationBar.appearance().scrollEdgeAppearance = navigation

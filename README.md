@@ -1,6 +1,6 @@
 # Somnia
 
-iPhone prototype for a hackathon demo. One synthetic patient, Avery Quinn. The phone calls a Python service that scores heart-rate and motion with an Isolation Forest. That service is what runs on Vultr.
+iPhone prototype for a hackathon demo. One synthetic patient, Krish Hariharan. The phone calls a Python service that scores heart-rate and motion with an Isolation Forest. That service is what runs on Vultr.
 
 This version is the first usable section.
 

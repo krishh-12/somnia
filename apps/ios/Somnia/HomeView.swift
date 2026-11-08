@@ -105,9 +105,58 @@ struct PatientHome: View {
                             .chartYAxis { AxisMarks(position: .leading) }
                             .frame(maxWidth: .infinity)
                             .frame(height: 190)
-                            Text("\(readings.count) saved samples. A new test extends this graph. Every third one is the seizure-like pattern. Red points also need heart rate at least 20% above baseline, the low end of the 20–70% rise used in cardiac seizure detection. A 2013 wrist-accelerometer study flagged convulsive seizures when strong movement kept going. A turn stays under the line. This is not a diagnosis.")
-                                .font(.somnia(.footnote))
+                            ReadMore(text: "\(readings.count) saved samples. A new test extends this graph. Every third one is the seizure-like pattern. Red points also need heart rate at least 20% above baseline, the low end of the 20–70% rise used in cardiac seizure detection. A 2013 wrist-accelerometer study flagged convulsive seizures when strong movement kept going. A turn stays under the line. This is not a diagnosis.")
+                        }
+                    }
+
+                    NightCard {
+                        Text("Heart-rate variability")
+                            .font(.somnia(.headline, weight: .semibold))
+                        Text("Across is time of night. Up is beat-to-beat variation. It falls at the seizure-like pattern, while heart rate rises.")
+                            .font(.somnia(.footnote))
+                            .foregroundStyle(Night.muted)
+                        if readings.isEmpty {
+                            Text("No readings yet")
                                 .foregroundStyle(Night.muted)
+                                .frame(maxWidth: .infinity, minHeight: 160, alignment: .center)
+                        } else {
+                            Chart {
+                                ForEach(readings) { point in
+                                    if let variability = point.hrvRmssd {
+                                        LineMark(
+                                            x: .value("Time of night", point.at),
+                                            y: .value("Variability (ms)", variability),
+                                            series: .value("Run", point.run)
+                                        )
+                                        .foregroundStyle(Night.pink)
+                                        .interpolationMethod(.catmullRom)
+                                        if (point.motionRms ?? 0) >= motionBar, (point.heartRateBpm ?? 0) >= heartBar {
+                                            PointMark(
+                                                x: .value("Time of night", point.at),
+                                                y: .value("Variability (ms)", variability)
+                                            )
+                                            .foregroundStyle(Night.danger)
+                                            .symbolSize(40)
+                                        }
+                                    }
+                                }
+                            }
+                            .chartXAxisLabel("Time of night")
+                            .chartYAxisLabel("RMSSD (ms)")
+                            .chartXAxis {
+                                AxisMarks(values: .automatic(desiredCount: 3)) { value in
+                                    AxisGridLine()
+                                    AxisValueLabel {
+                                        if let date = value.as(Date.self) {
+                                            Text(date, format: .dateTime.hour().minute())
+                                        }
+                                    }
+                                }
+                            }
+                            .chartYAxis { AxisMarks(position: .leading) }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 190)
+                            ReadMore(text: "Red points are the seizure-like pattern: movement stays strong and heart rate is up, while variability drops. A turn keeps variability near the resting range. Wearable studies of convulsive seizures often report a heart-rate rise together with a fall in variability, measured as RMSSD (Jeppesen et al., Epilepsia, 2015). This graph is synthetic. It is not a diagnosis.")
                         }
                     }
 
@@ -119,8 +168,7 @@ struct PatientHome: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Night.pink)
+                    .buttonStyle(NeuButtonStyle(prominent: true))
                     .disabled(model.busy)
 
                     Button { model.confirmReset = true } label: {
@@ -129,8 +177,7 @@ struct PatientHome: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(Night.indigo)
+                    .buttonStyle(NeuButtonStyle())
                     .disabled(model.busy || readings.isEmpty)
 
                     Button {
@@ -141,8 +188,7 @@ struct PatientHome: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(Night.indigo)
+                    .buttonStyle(NeuButtonStyle())
 
                     if !model.status.isEmpty {
                         Text(model.status)
@@ -216,6 +262,46 @@ struct PatientHome: View {
     }
 }
 
+private struct ReadMore: View {
+    var text: String
+    @State private var open = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(Night.reveal) { open.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(open ? "Read less" : "Read more")
+                        .font(.somnia(.footnote, weight: .semibold))
+                    Image(systemName: "chevron.down")
+                        .font(.somnia(.caption, weight: .semibold))
+                        .rotationEffect(.degrees(open ? 180 : 0))
+                }
+                .foregroundStyle(Night.pink)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(open ? "Hides the note" : "Shows the note")
+            if open {
+                Text(text)
+                    .font(.somnia(.footnote))
+                    .foregroundStyle(Night.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .neuInset()
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.96, anchor: .top)).combined(with: .offset(y: -6)),
+                        removal: .opacity.combined(with: .scale(scale: 0.98, anchor: .top))
+                    ))
+            }
+        }
+        .animation(Night.reveal, value: open)
+        .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.7), trigger: open) { _, opened in
+            opened
+        }
+    }
+}
+
 struct WearableSheet: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -229,9 +315,13 @@ struct WearableSheet: View {
                     .foregroundStyle(Night.pink)
                 Text("Nothing is paired. A later watch can send readings through this same server. The graph keeps using the simulated test until then.")
                     .foregroundStyle(Night.muted)
-                Button("Keep the simulated test") { dismiss() }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Night.pink)
+                Button { dismiss() } label: {
+                    Text("Keep the simulated test")
+                        .font(.somnia(.headline, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                }
+                .buttonStyle(NeuButtonStyle(prominent: true))
                 Spacer()
             }
             .padding(24)

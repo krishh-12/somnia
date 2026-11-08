@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from somnia.db import db_session
 from somnia.insights import build_insights
-from somnia.models import Event, FeatureWindow, NightLog
+from somnia.models import AnomalyLog, Event, FeatureWindow
 from somnia.pipeline import (
     FEEDBACK_LABELS,
     acknowledge,
@@ -24,7 +24,7 @@ from somnia.pipeline import (
     run_case,
     user_for_token,
 )
-from somnia.signals import CASES, MOTION_BAR, case_for_click, heart_rate_bar
+from somnia.signals import CASES, MOTION_BAR, case_for_click, estimate_hrv, heart_rate_bar
 
 router = APIRouter(prefix="/api/v1")
 
@@ -58,6 +58,7 @@ class ReadingOut(BaseModel):
     at: datetime
     heart_rate_bpm: float | None
     motion_rms: float | None
+    hrv_rmssd: float | None = None
     score: float | None
     quality: str
 
@@ -100,12 +101,15 @@ class EventList(BaseModel):
 
 class LogOut(BaseModel):
     id: uuid.UUID
-    event_id: uuid.UUID
+    event_id: uuid.UUID | None = None
     at: datetime
     likely: str
     detail: str
     source: str
     kind: str
+    heart_rate_bpm: float | None = None
+    hrv_rmssd: float | None = None
+    motion_rms: float | None = None
     synthetic: bool
 
 
@@ -176,13 +180,19 @@ def _event_out(event: Event) -> EventOut:
 
 def _reading(index: int, run: int, window: FeatureWindow) -> ReadingOut:
     features = window.features or {}
+    heart_rate = features.get("hr")
+    motion_rms = features.get("motion_rms")
+    hrv = features.get("hrv_rmssd")
+    if hrv is None and heart_rate is not None and motion_rms is not None:
+        hrv = estimate_hrv(float(heart_rate), float(motion_rms))
     return ReadingOut(
         index=index,
         run=run,
         sequence=window.sequence,
         at=aware(window.window_end),
-        heart_rate_bpm=features.get("hr"),
-        motion_rms=features.get("motion_rms"),
+        heart_rate_bpm=heart_rate,
+        motion_rms=motion_rms,
+        hrv_rmssd=None if hrv is None else round(float(hrv), 2),
         score=window.raw_score,
         quality=window.quality,
     )
@@ -279,22 +289,23 @@ def insights(_user=Depends(current_user), db: Session = Depends(db_session)) -> 
 @router.get("/logs", response_model=LogList)
 def logs(_user=Depends(current_user), db: Session = Depends(db_session)) -> LogList:
     ensure_logs(db)
-    rows = db.execute(
-        select(NightLog, Event).join(Event, Event.id == NightLog.event_id).order_by(Event.started_at.desc())
-    ).all()
+    rows = db.scalars(select(AnomalyLog).order_by(AnomalyLog.started_at.desc())).all()
     return LogList(
         entries=[
             LogOut(
                 id=log.id,
                 event_id=log.event_id,
-                at=aware(event.started_at),
+                at=aware(log.started_at),
                 likely=log.likely,
                 detail=log.detail,
                 source=log.source,
-                kind=event.kind,
-                synthetic=event.synthetic,
+                kind=log.kind,
+                heart_rate_bpm=log.heart_rate_bpm,
+                hrv_rmssd=log.hrv_rmssd,
+                motion_rms=log.motion_rms,
+                synthetic=log.synthetic,
             )
-            for log, event in rows
+            for log in rows
         ]
     )
 

@@ -78,6 +78,26 @@ def _with_limit(lines: tuple[str, str]) -> tuple[str, str]:
 
 
 def _complete(prompt: str) -> tuple[str, str] | None:
+    system = (
+        "Summarize only the counts in the user message for a prototype screen. "
+        "Do not invent heart rates, times, medications, pain, anxiety, or care that was given. "
+        "Do not say seizure. seizure-like is allowed. "
+        'Return JSON with keys "cause" and "action". '
+        "cause is one sentence about the pattern in those counts. "
+        "action tells the person to turn the alarm off if they are safe, and must include the exact words "
+        '"This is not a diagnosis."'
+    )
+    for _ in range(2):
+        content = _post_chat(prompt, system, 1000)
+        if content is None:
+            continue
+        parsed = _parse(content)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _post_chat(prompt: str, system: str, max_tokens: int) -> str | None:
     key = os.environ.get("VULTR_INFERENCE_API_KEY", "").strip()
     if not key:
         return None
@@ -86,22 +106,11 @@ def _complete(prompt: str) -> tuple[str, str] | None:
         {
             "model": model,
             "temperature": 0.2,
-            "max_tokens": 700,
+            "max_tokens": max_tokens,
             "reasoning_effort": "minimal",
             "response_format": {"type": "json_object"},
             "messages": [
-                {
-                    "role": "system",
-            "content": (
-                "Summarize only the counts in the user message for a prototype screen. "
-                "Do not invent heart rates, times, medications, pain, anxiety, or care that was given. "
-                "Do not say seizure. "
-                'Return JSON with keys "cause" and "action". '
-                "cause is one sentence about the pattern in those counts. "
-                "action tells the person to turn the alarm off if they are safe, and must include the exact words "
-                '"This is not a diagnosis."'
-            ),
-                },
+                {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
             ],
         }
@@ -115,10 +124,18 @@ def _complete(prompt: str) -> tuple[str, str] | None:
     try:
         with urllib.request.urlopen(request, timeout=20) as response:
             payload = json.loads(response.read().decode())
-        content = payload["choices"][0]["message"]["content"]
-    except Exception:
+        message = payload["choices"][0]["message"]
+        content = str(message.get("content") or "").strip()
+        if not content:
+            reasoning = str(message.get("reasoning") or "")
+            start, end = reasoning.find("{"), reasoning.rfind("}")
+            content = reasoning[start : end + 1] if start >= 0 and end > start else ""
+    except Exception as exc:
+        status = getattr(exc, "code", "")
+        print(f"vultr inference failed: {type(exc).__name__} {status}".rstrip())
         return None
-    return _parse(content)
+    text = str(content).strip()
+    return text or None
 
 
 def _parse(content: str) -> tuple[str, str] | None:
@@ -145,80 +162,74 @@ def _parse(content: str) -> tuple[str, str] | None:
 
 
 LIKELY = {
-    "alarm": "Likely a seizure-like pattern",
-    "observation": "Likely a heart-rate change",
+    "seizure_like": "Likely a seizure-like pattern",
+    "heart_rate": "Likely a heart-rate change",
+    "turn": "Likely a turn in bed",
 }
+_KIND_ALIAS = {"alarm": "seizure_like", "observation": "heart_rate"}
 
 
 def rule_log(kind: str) -> tuple[str, str]:
-    if kind == "alarm":
+    kind = _KIND_ALIAS.get(kind, kind)
+    if kind == "seizure_like":
         return (
-            LIKELY["alarm"],
-            "Movement and heart rate stayed up together. This is not a diagnosis.",
+            LIKELY["seizure_like"],
+            "Heart rate rose and heart-rate variability fell while movement stayed strong. This is not a diagnosis.",
+        )
+    if kind == "turn":
+        return (
+            LIKELY["turn"],
+            "Movement rose briefly. Heart rate and variability stayed near the resting pattern. This is not a diagnosis.",
         )
     return (
-        LIKELY["observation"],
-        "Heart rate rose without a strong movement pattern. This is not a diagnosis.",
+        LIKELY["heart_rate"],
+        "Heart rate rose, variability dipped, and movement stayed quiet. This is not a diagnosis.",
     )
 
 
-def describe_event(*, kind: str, score: float, heart_rate: float, motion_rms: float) -> tuple[str, str, str]:
+def describe_event(
+    *,
+    kind: str,
+    score: float,
+    heart_rate: float,
+    motion_rms: float,
+    hrv_rmssd: float = 0,
+) -> tuple[str, str, str]:
     fallback = rule_log(kind)
     if not os.environ.get("VULTR_INFERENCE_API_KEY", "").strip():
         return (*fallback, "rules")
     written = _complete_log(
         f"Required likely label: {fallback[0]}. "
-        f"Peak anomaly score: {score:.2f}. Heart rate: {heart_rate:.0f}. "
-        f"Motion rms: {motion_rms:.2f}. Synthetic demo reading."
+        f"Heart rate: {heart_rate:.0f} bpm. Heart-rate variability: {hrv_rmssd:.0f} ms RMSSD. "
+        f"Motion: {motion_rms:.2f}. Peak anomaly score: {score:.2f}. Synthetic demo reading. "
+        "The screen already shows those measurements. Do not include digits."
     )
-    if written is None:
+    if written is None or written[0] != fallback[0]:
         return (*fallback, "rules")
-    return (*written, "vultr")
+    detail = written[1] if not any(character.isdigit() for character in written[1]) else fallback[1]
+    return written[0], detail, "vultr"
 
 
 def _complete_log(prompt: str) -> tuple[str, str] | None:
-    key = os.environ.get("VULTR_INFERENCE_API_KEY", "").strip()
-    if not key:
-        return None
-    model = os.environ.get("VULTR_INFERENCE_MODEL", "qwen3.8-flash-next")
     allowed = ", ".join(LIKELY.values())
-    body = json.dumps(
-        {
-            "model": model,
-            "temperature": 0.2,
-            "max_tokens": 500,
-            "reasoning_effort": "minimal",
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "Label one synthetic demo anomaly for a log. "
-                        f"The likely value must be exactly one of: {allowed}. "
-                        "Use the required likely label from the user message. "
-                        "detail is one sentence and must include the exact words "
-                        '"This is not a diagnosis." '
-                        "Do not name a disease, medicine, or dose. "
-                        "Do not say the pattern is a seizure. seizure-like is allowed only inside the required label."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-        }
-    ).encode()
-    request = urllib.request.Request(
-        "https://api.vultrinference.com/v1/chat/completions",
-        data=body,
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        method="POST",
+    system = (
+        "Label one synthetic demo anomaly for a log. "
+        f"The likely value must be exactly one of: {allowed}. "
+        "Copy the required likely label with no extra period. "
+        "detail is one sentence and must include the exact words "
+        '"This is not a diagnosis." '
+        "Do not name a disease, medicine, or dose. "
+        "Do not say the pattern is a seizure. seizure-like is allowed only inside the required label. "
+        "Put the JSON in the reply, not in private reasoning."
     )
-    try:
-        with urllib.request.urlopen(request, timeout=20) as response:
-            payload = json.loads(response.read().decode())
-        content = payload["choices"][0]["message"]["content"]
-    except Exception:
-        return None
-    return _parse_log(content)
+    for _ in range(2):
+        content = _post_chat(prompt, system, 1000)
+        if content is None:
+            continue
+        parsed = _parse_log(content)
+        if parsed is not None:
+            return parsed
+    return None
 
 
 def _parse_log(content: str) -> tuple[str, str] | None:
@@ -233,9 +244,9 @@ def _parse_log(content: str) -> tuple[str, str] | None:
             data = json.loads(text[start : end + 1])
         except json.JSONDecodeError:
             return None
-    likely = str(data.get("likely", "")).strip()
+    likely = _canonical_likely(str(data.get("likely", "")))
     detail = str(data.get("detail", "")).strip()
-    if likely not in LIKELY.values() or not detail:
+    if likely is None or not detail:
         return None
     if "not a diagnosis" not in detail.lower():
         detail = detail.rstrip(".") + ". This is not a diagnosis."
@@ -247,7 +258,17 @@ def _parse_log(content: str) -> tuple[str, str] | None:
     return likely, detail
 
 
+def _canonical_likely(text: str) -> str | None:
+    cleaned = text.strip().rstrip(".").strip()
+    for label in LIKELY.values():
+        if cleaned.casefold() == label.casefold():
+            return label
+    return None
+
+
 def _plain_summary(cause: str, action: str) -> bool:
     blob = f"{cause} {action}".lower()
-    banned = ("bpm", " mg", "pain", "administered", "medication", "anxiety", "tachycardia", "prescribed", "dosage", "seizure")
-    return not any(word in blob for word in banned)
+    banned = ("bpm", " mg", "pain", "administered", "medication", "anxiety", "tachycardia", "prescribed", "dosage")
+    if any(word in blob for word in banned):
+        return False
+    return "seizure" not in blob.replace("seizure-like", "")

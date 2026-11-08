@@ -30,7 +30,7 @@ struct HistoryView: View {
                             }
                         }
                         .padding(.vertical, 6)
-                        .listRowBackground(Night.card)
+                        .listRowBackground(Night.well)
                     }
                     .scrollContentBackground(.hidden)
                 }
@@ -43,6 +43,7 @@ struct HistoryView: View {
 
 struct InsightsView: View {
     @Bindable var model: DemoModel
+    @State private var openSection: String?
 
     var body: some View {
         NavigationStack {
@@ -50,32 +51,42 @@ struct InsightsView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if let insights = model.insights {
                         HStack(alignment: .top, spacing: 12) {
-                            countCard("Tonight", value: insights.tonightCount, caption: "anomalies")
+                            countCard("Today", value: insights.tonightCount, caption: "anomalies")
                             countCard("This week", value: insights.weekCount, caption: "anomalies")
                         }
                         Text("Tap a header to open it.")
                             .font(.somnia(.footnote))
                             .foregroundStyle(Night.muted)
-                        Fold(title: "Tonight", summary: tonightDetail(insights)) {
+                        Fold(title: "Today", summary: tonightDetail(insights), isOpen: openSection == "Today") {
+                            openSection = openSection == "Today" ? nil : "Today"
+                        } content: {
                             Text(model.live?.sleepWindow ?? "Sleep window not loaded")
                             Text(insights.tonightCount == 0 ? "Nothing saved in the current sleep window." : "An alarm needs movement and a higher heart rate. An observation is heart rate alone.")
                         }
-                        Fold(title: "This week", summary: weekDetail()) {
+                        Fold(title: "This week", summary: weekDetail(), isOpen: openSection == "This week") {
+                            openSection = openSection == "This week" ? nil : "This week"
+                        } content: {
                             Text(weekCaption())
                         }
-                        Fold(title: "Usual hour", summary: insights.commonTime ?? "Not enough yet") {
+                        Fold(title: "Usual hour", summary: insights.commonTime ?? "Not enough yet", isOpen: openSection == "Usual hour") {
+                            openSection = openSection == "Usual hour" ? nil : "Usual hour"
+                        } content: {
                             Text(commonDetail(insights))
                         }
-                        Fold(title: "Written summary", summary: insights.narration == "vultr" ? "From a Vultr model" : "Fixed sentences") {
+                        Fold(title: "Written summary", summary: insights.narration == "vultr" ? "From a Vultr model" : "Fixed sentences", isOpen: openSection == "Written summary") {
+                            openSection = openSection == "Written summary" ? nil : "Written summary"
+                        } content: {
                             Text(insights.cause)
                             Text(insights.action)
                             Text(insights.narration == "vultr" ? "A Vultr model wrote these two paragraphs from the counts. It did not produce the score. This is not a diagnosis." : "These sentences are the backup wording. This is not a diagnosis.")
                         }
-                        Fold(title: "Plan for Avery", summary: planSummary(insights)) {
+                        Fold(title: "Plan for Krish", summary: planSummary(insights), isOpen: openSection == "Plan for Krish") {
+                            openSection = openSection == "Plan for Krish" ? nil : "Plan for Krish"
+                        } content: {
                             ForEach(Array(planSteps(insights).enumerated()), id: \.offset) { index, step in
                                 Text("\(index + 1). \(step)")
                             }
-                            Text("Sources: CDC seizure first aid, and Harden et al., Neurology, 2017, a guideline from the American Academy of Neurology and the American Epilepsy Society. The guideline’s nighttime-supervision suggestion is for selected people who already have frequent convulsive seizures. Avery’s nights here are synthetic. This is not a diagnosis or a clinician’s order.")
+                            Text("Sources: CDC seizure first aid, and Harden et al., Neurology, 2017, a guideline from the American Academy of Neurology and the American Epilepsy Society. The guideline’s nighttime-supervision suggestion is for selected people who already have frequent convulsive seizures. Krish’s nights here are synthetic. This is not a diagnosis or a clinician’s order.")
                                 .font(.somnia(.footnote))
                         }
                         if insights.synthetic {
@@ -183,7 +194,7 @@ struct InsightsView: View {
             let noun = noted == 1 ? "event has" : "events have"
             steps.append("\(noted) \(noun) a saved note about what was happening. The note does not change the score, and a physician has not reviewed it yet.")
         }
-        steps.append("The caregiver screen is who this demo says it will notify if an alarm stays on. A 2017 guideline found that, for some people who already have frequent convulsive seizures at night, having another person nearby or a listening device was associated with lower sudden-death risk. That finding is not a risk score for Avery.")
+        steps.append("The caregiver screen is who this demo says it will notify if an alarm stays on. A 2017 guideline found that, for some people who already have frequent convulsive seizures at night, having another person nearby or a listening device was associated with lower sudden-death risk. That finding is not a risk score for Krish.")
         steps.append("CDC first aid says to call emergency services if a seizure lasts longer than 5 minutes, another starts soon after, breathing or waking is difficult, there is an injury, it happens in water, or the person has never had a seizure before.")
         return steps
     }
@@ -192,44 +203,61 @@ struct InsightsView: View {
 private struct Fold<Content: View>: View {
     var title: String
     var summary: String
+    var isOpen: Bool
+    var toggle: () -> Void
     @ViewBuilder var content: () -> Content
-    @State private var open = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Button {
-                withAnimation(.easeInOut(duration: 0.22)) { open.toggle() }
+                withAnimation(Night.reveal) { toggle() }
             } label: {
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(title)
-                            .font(.somnia(.subheadline))
-                            .foregroundStyle(Night.pink)
-                        Text(summary)
-                            .font(.somnia(.headline, weight: .semibold))
-                            .foregroundStyle(Night.text)
-                            .multilineTextAlignment(.leading)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    Image(systemName: open ? "chevron.up" : "chevron.down")
+                HStack(alignment: .center, spacing: 12) {
+                    Circle()
+                        .fill(Night.pink)
+                        .frame(width: 9, height: 9)
+                        .scaleEffect(isOpen ? 1.25 : 0.85)
+                        .opacity(isOpen ? 1 : 0.45)
+                        .shadow(color: Night.pink.opacity(isOpen ? 0.7 : 0), radius: 6)
+                    Text(title)
+                        .font(.somnia(.title3, weight: .semibold))
+                        .foregroundStyle(Night.text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.down")
                         .font(.somnia(.subheadline, weight: .semibold))
                         .foregroundStyle(Night.pink)
-                        .padding(.top, 4)
+                        .rotationEffect(.degrees(isOpen ? 180 : 0))
+                        .padding(8)
+                        .neuRaised(radius: 14)
                 }
             }
             .buttonStyle(.plain)
-            .accessibilityHint(open ? "Hides the details" : "Shows the details")
-            if open {
+            .accessibilityHint(isOpen ? "Hides the details" : "Shows the details")
+            if isOpen {
                 VStack(alignment: .leading, spacing: 10) {
+                    Text(summary)
+                        .font(.somnia(.headline, weight: .semibold))
+                        .foregroundStyle(Night.pink)
                     content()
                 }
                 .font(.somnia(.body))
                 .foregroundStyle(Night.muted)
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .neuInset()
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .scale(scale: 0.94, anchor: .top)).combined(with: .offset(y: -8)),
+                    removal: .opacity.combined(with: .scale(scale: 0.96, anchor: .top))
+                ))
             }
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Night.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .neuRaised()
+        .animation(Night.reveal, value: isOpen)
+        .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.85), trigger: isOpen) { _, opened in
+            opened
+        }
     }
 }
 
@@ -241,7 +269,7 @@ struct LogView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if model.logs.isEmpty {
-                        Text("No anomalies logged yet. A saved alarm or heart-rate change appears here.")
+                        Text("No anomalies logged yet. A turn, a heart-rate change, or a seizure-like pattern appears here. Quiet sleep does not.")
                             .foregroundStyle(Night.muted)
                     } else {
                         ForEach(model.logs) { entry in
@@ -251,9 +279,15 @@ struct LogView: View {
                                     .foregroundStyle(Night.muted)
                                 Text(entry.likely)
                                     .font(.somnia(.headline, weight: .semibold))
-                                    .foregroundStyle(Night.pink)
+                                    .foregroundStyle(entry.kind == "seizure_like" ? Night.danger : Night.pink)
                                 Text(entry.detail)
-                                Text(entry.source == "vultr" ? "Compiled by a Vultr model. This is not a diagnosis." : "Fixed wording. A Vultr model was not used for this line.")
+                                if let heart = entry.heartRateBpm, let variability = entry.hrvRmssd, let motion = entry.motionRms {
+                                    Text("Heart rate \(Int(heart.rounded())) bpm")
+                                    Text("Variability \(Int(variability.rounded())) ms")
+                                    Text(String(format: "Motion %.2f m/s²", motion))
+                                        .foregroundStyle(Night.muted)
+                                }
+                                Text(entry.source == "vultr" ? "Compiled by a Vultr model from these measurements. This is not a diagnosis." : "Fixed wording from these measurements. A Vultr model was not used for this line.")
                                     .font(.somnia(.footnote))
                                     .foregroundStyle(entry.source == "vultr" ? Night.pink : Night.muted)
                                 if entry.synthetic {
@@ -299,8 +333,7 @@ struct ProfileView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Night.pink)
+                    .buttonStyle(NeuButtonStyle(prominent: true))
                     Button {
                         model.showWearable = true
                     } label: {
@@ -308,8 +341,7 @@ struct ProfileView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.vertical, 8)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(Night.indigo)
+                    .buttonStyle(NeuButtonStyle())
                     Text("somnia is a prototype. It does not diagnose seizures, predict events, or replace medical care. On iPhone the alarm plays a sound and a haptic while its screen is open. It is not a locked-phone alarm.")
                         .font(.somnia(.footnote))
                         .foregroundStyle(Night.muted)
@@ -357,15 +389,14 @@ struct FeedbackSheet: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(choice == key ? Night.pink : Night.card)
+                        .buttonStyle(NeuButtonStyle(prominent: choice == key))
                     }
                     TextField("Add a note", text: $note, axis: .vertical)
                         .font(.somnia(.body))
                         .foregroundStyle(Night.text)
                         .lineLimit(3 ... 5)
                         .padding(12)
-                        .background(Night.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .neuInset()
                     Button {
                         Task {
                             let saved = await model.sendFeedback(label: choice, note: note)
@@ -377,8 +408,7 @@ struct FeedbackSheet: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Night.pink)
+                    .buttonStyle(NeuButtonStyle(prominent: true))
                     .disabled(model.busy || choice.isEmpty)
                     Button {
                         model.showFeedback = false

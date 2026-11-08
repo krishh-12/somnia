@@ -26,6 +26,8 @@ targets:
       properties:
         CFBundleDisplayName: somnia
         CFBundleIconName: AppIcon
+        UIAppFonts:
+          - Fraunces.ttf
         UILaunchScreen: {}
         SomniaAPIBaseURL: http://149.28.253.209:8090
         NSAppTransportSecurity:

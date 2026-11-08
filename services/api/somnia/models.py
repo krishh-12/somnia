@@ -118,6 +118,24 @@ class Event(Base):
     synthetic: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class AnomalyLog(Base):
+    __tablename__ = "anomaly_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("monitoring_sessions.id"), unique=True)
+    event_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("events.id"), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    likely: Mapped[str] = mapped_column(Text)
+    detail: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(Text)
+    heart_rate_bpm: Mapped[float] = mapped_column(Float)
+    hrv_rmssd: Mapped[float] = mapped_column(Float)
+    motion_rms: Mapped[float] = mapped_column(Float)
+    synthetic: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class NightLog(Base):
     __tablename__ = "night_logs"
 

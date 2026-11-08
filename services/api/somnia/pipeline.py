@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from somnia.ml import BASELINE_HR, FEATURE_VERSION, MODEL_SEED, anomaly_score, train_model
 from somnia.models import (
     AccessToken,
+    AnomalyLog,
     Event,
     FeatureWindow,
     ModelVersion,
@@ -20,8 +21,7 @@ from somnia.models import (
     User,
 )
 from somnia.narrate import describe_event
-
-from somnia.signals import CASES, HR_RISE, MOTION_BAR, SECONDS, heart_rate_bar, synthesize_second
+from somnia.signals import CASES, HR_RISE, MOTION_BAR, SECONDS, TURN_MOTION, estimate_hrv, heart_rate_bar, synthesize_second
 
 FEEDBACK_LABELS = {
     "turning_over": "I was turning over",
@@ -32,7 +32,7 @@ FEEDBACK_LABELS = {
 ACK_SECONDS = 20
 PATIENT_ID = uuid.UUID("11111111-1111-4111-8111-111111111111")
 ROLES = {
-    "patient": ("Avery Quinn", "avery.quinn@demo.somnia.test"),
+    "patient": ("Krish Hariharan", "krish.hariharan@demo.somnia.test"),
     "caregiver": ("Casey Morgan", "casey.morgan@demo.somnia.test"),
     "physician": ("Parker Singh", "parker.singh@demo.somnia.test"),
 }
@@ -66,16 +66,24 @@ def ensure_ready(db: Session) -> Patient:
     if patient is None:
         patient = Patient(
             id=PATIENT_ID,
-            display_name="Avery Quinn",
+            display_name=ROLES["patient"][0],
             timezone="America/Chicago",
             sleep_start="22:00",
             sleep_end="06:30",
             baseline_hr=BASELINE_HR,
         )
         db.add(patient)
-        for role, (name, email) in ROLES.items():
-            db.add(User(role=role, display_name=name, email=email))
         db.flush()
+    else:
+        patient.display_name = ROLES["patient"][0]
+    for role, (name, email) in ROLES.items():
+        user = db.scalar(select(User).where(User.role == role))
+        if user is None:
+            db.add(User(role=role, display_name=name, email=email))
+        else:
+            user.display_name = name
+            user.email = email
+    db.flush()
     global _model
     existing = db.scalar(
         select(ModelVersion)
@@ -167,8 +175,9 @@ def run_case(db: Session, case: str, seed: int = MODEL_SEED) -> MonitoringSessio
     calm = 0
     hr_streak = 0
     open_event: Event | None = None
+    windows: list[FeatureWindow] = []
     for index in range(SECONDS):
-        heart_rate, motion_rms, motion_var, quality, motion = synthesize_second(case, index, seed, int(prior))
+        heart_rate, motion_rms, motion_var, hrv, quality, motion = synthesize_second(case, index, seed, int(prior))
         moment = started + timedelta(minutes=index * 2)
         score = anomaly_score(cached.model, heart_rate, motion_rms, motion_var)
         features = {
@@ -176,6 +185,7 @@ def run_case(db: Session, case: str, seed: int = MODEL_SEED) -> MonitoringSessio
             "hr_delta": round(heart_rate - BASELINE_HR, 3),
             "motion_rms": round(motion_rms, 4),
             "motion_var": round(motion_var, 4),
+            "hrv_rmssd": round(hrv, 2),
         }
         db.add(
             SensorBatch(
@@ -191,18 +201,18 @@ def run_case(db: Session, case: str, seed: int = MODEL_SEED) -> MonitoringSessio
                 payload={"schema_version": 1, "source": "simulator", "motion": motion, "heart_rate_bpm": heart_rate},
             )
         )
-        db.add(
-            FeatureWindow(
-                patient_id=patient.id,
-                session_id=session.id,
-                sequence=index,
-                window_end=moment,
-                features=features,
-                raw_score=score,
-                quality=quality,
-                model_id=cached.model_id,
-            )
+        window = FeatureWindow(
+            patient_id=patient.id,
+            session_id=session.id,
+            sequence=index,
+            window_end=moment,
+            features=features,
+            raw_score=score,
+            quality=quality,
+            model_id=cached.model_id,
         )
+        windows.append(window)
+        db.add(window)
         qualifying = motion_rms >= MOTION_BAR and heart_rate >= BASELINE_HR * (1 + HR_RISE)
         hr_only = heart_rate >= heart_rate_bar(BASELINE_HR) and motion_rms < MOTION_BAR
         if qualifying:
@@ -223,7 +233,6 @@ def run_case(db: Session, case: str, seed: int = MODEL_SEED) -> MonitoringSessio
                     synthetic=True,
                 )
                 db.add(open_event)
-                _save_log(db, open_event, heart_rate, motion_rms)
             elif open_event is not None and score > (open_event.score_peak or 0):
                 open_event.score_peak = score
         elif hr_only:
@@ -243,7 +252,6 @@ def run_case(db: Session, case: str, seed: int = MODEL_SEED) -> MonitoringSessio
                     synthetic=True,
                 )
                 db.add(open_event)
-                _save_log(db, open_event, heart_rate, motion_rms)
         else:
             streak = 0
             hr_streak = 0
@@ -251,6 +259,7 @@ def run_case(db: Session, case: str, seed: int = MODEL_SEED) -> MonitoringSessio
             if open_event is not None and open_event.ended_at is None and calm >= 3:
                 open_event.ended_at = moment
     session.ended_at = started + timedelta(minutes=(SECONDS - 1) * 2)
+    _save_run_log(db, session, open_event, windows)
     db.commit()
     return session
 
@@ -276,33 +285,118 @@ def compounded_readings(db: Session) -> list[tuple[int, FeatureWindow]]:
     return rows
 
 
-def _save_log(db: Session, event: Event, heart_rate: float, motion_rms: float) -> None:
+def _sample(window: FeatureWindow) -> tuple[float, float, float] | None:
+    features = window.features or {}
+    heart_rate = features.get("hr")
+    motion_rms = features.get("motion_rms")
+    if heart_rate is None or motion_rms is None:
+        return None
+    hrv = features.get("hrv_rmssd")
+    if hrv is None:
+        hrv = estimate_hrv(float(heart_rate), float(motion_rms))
+    return float(heart_rate), float(motion_rms), float(hrv)
+
+
+def characteristic(windows: list[FeatureWindow]) -> tuple[FeatureWindow, str, float, float, float] | None:
+    """One profile for a run, chosen from its measurements. Quiet sleep returns nothing."""
+    rows = [(window, sample) for window in windows if (sample := _sample(window)) is not None]
+    if not rows:
+        return None
+    seizure = [row for row in rows if row[1][1] >= MOTION_BAR and row[1][0] >= heart_rate_bar()]
+    if seizure:
+        window, (heart_rate, motion_rms, hrv) = max(seizure, key=lambda row: row[1][1])
+        return window, "seizure_like", heart_rate, motion_rms, hrv
+    if max(row[1][0] for row in rows) >= heart_rate_bar():
+        window, (heart_rate, motion_rms, hrv) = max(rows, key=lambda row: row[1][0])
+        return window, "heart_rate", heart_rate, motion_rms, hrv
+    if max(row[1][1] for row in rows) >= TURN_MOTION:
+        window, (heart_rate, motion_rms, hrv) = max(rows, key=lambda row: row[1][1])
+        return window, "turn", heart_rate, motion_rms, hrv
+    return None
+
+
+def _save_run_log(db: Session, session: MonitoringSession, event: Event | None, windows: list[FeatureWindow]) -> None:
+    found = characteristic(windows)
+    if found is None:
+        return
+    window, kind, heart_rate, motion_rms, hrv = found
     db.flush()
     likely, detail, source = describe_event(
-        kind=event.kind,
-        score=event.score_peak or 0,
+        kind=kind,
+        score=window.raw_score or 0,
         heart_rate=heart_rate,
         motion_rms=motion_rms,
+        hrv_rmssd=hrv,
     )
-    db.add(NightLog(event_id=event.id, likely=likely, detail=detail, source=source))
+    db.add(
+        AnomalyLog(
+            session_id=session.id,
+            event_id=None if event is None else event.id,
+            started_at=window.window_end,
+            likely=likely,
+            detail=detail,
+            source=source,
+            kind=kind,
+            heart_rate_bpm=round(heart_rate, 1),
+            hrv_rmssd=round(hrv, 1),
+            motion_rms=round(motion_rms, 2),
+            synthetic=True,
+        )
+    )
 
 
 def ensure_logs(db: Session) -> None:
-    from somnia.narrate import rule_log
-
-    events = db.scalars(select(Event)).all()
-    have = set(db.scalars(select(NightLog.event_id)).all())
-    for event in events:
-        if event.id in have or event.kind not in ("alarm", "observation"):
+    sessions = db.scalars(select(MonitoringSession)).all()
+    have = set(db.scalars(select(AnomalyLog.session_id)).all())
+    for session in sessions:
+        if session.id in have:
             continue
-        likely, detail = rule_log(event.kind)
-        db.add(NightLog(event_id=event.id, likely=likely, detail=detail, source="rules"))
+        found = characteristic(readings_for(db, session.id))
+        if found is None:
+            continue
+        window, kind, heart_rate, motion_rms, hrv = found
+        likely, detail, source = describe_event(
+            kind=kind,
+            score=window.raw_score or 0,
+            heart_rate=heart_rate,
+            motion_rms=motion_rms,
+            hrv_rmssd=hrv,
+        )
+        event = db.scalar(select(Event).where(Event.session_id == session.id))
+        db.add(
+            AnomalyLog(
+                session_id=session.id,
+                event_id=None if event is None else event.id,
+                started_at=window.window_end,
+                likely=likely,
+                detail=detail,
+                source=source,
+                kind=kind,
+                heart_rate_bpm=round(heart_rate, 1),
+                hrv_rmssd=round(hrv, 1),
+                motion_rms=round(motion_rms, 2),
+                synthetic=session.synthetic,
+            )
+        )
+    for saved in db.scalars(select(AnomalyLog).where(AnomalyLog.source == "rules")).all():
+        likely, detail, source = describe_event(
+            kind=saved.kind,
+            score=0,
+            heart_rate=saved.heart_rate_bpm,
+            motion_rms=saved.motion_rms,
+            hrv_rmssd=saved.hrv_rmssd,
+        )
+        if source != "vultr":
+            continue
+        saved.likely = likely
+        saved.detail = detail
+        saved.source = source
     db.commit()
 
 
 def reset_demo_data(db: Session) -> None:
     ensure_ready(db)
-    for table in (NightLog, Review, Event, FeatureWindow, SensorBatch, MonitoringSession):
+    for table in (AnomalyLog, NightLog, Review, Event, FeatureWindow, SensorBatch, MonitoringSession):
         db.execute(delete(table))
     db.commit()
 

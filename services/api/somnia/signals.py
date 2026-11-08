@@ -24,6 +24,33 @@ def heart_rate_bar(baseline: float = BASELINE_HR) -> float:
     return baseline * (1 + HR_RISE)
 
 
+# Above quiet sleep (~0.04 m/s²) and below the sustained-movement line. Not a published cutoff.
+TURN_MOTION = 1.0
+
+
+def estimate_hrv(heart_rate: float, motion_rms: float) -> float:
+    """Fill a missing variability value from the same pattern the simulator draws."""
+    if motion_rms >= MOTION_BAR and heart_rate >= heart_rate_bar():
+        return 14.0
+    if heart_rate >= heart_rate_bar():
+        return 30.0
+    if motion_rms >= TURN_MOTION:
+        return 46.0
+    return 48.0
+
+
+def _hrv(case: str, index: int, variation: int) -> float:
+    """RMSSD in milliseconds. It falls during the seizure-like window and stays near rest for a turn."""
+    resting = 46 + (variation % 5) * 0.8
+    if case == "sustained_motor_event" and 5 <= index <= 12:
+        return 12 + (variation % 3) * 2
+    if case == "hr_only" and 5 <= index <= 12:
+        return 28 + (variation % 3) * 2
+    if case == "turn_in_bed" and 3 <= index <= 4:
+        return resting - 3
+    return resting
+
+
 def case_for_click(completed: int) -> str:
     """Every third demo click is the seizure-like pattern. The others rotate."""
     click = completed + 1
@@ -58,8 +85,11 @@ def _shape(case: str, index: int, variation: int = 0) -> tuple[float, float, flo
     raise ValueError("unknown case")
 
 
-def synthesize_second(case: str, index: int, seed: int, variation: int = 0) -> tuple[float, float, float, str, list[dict]]:
+def synthesize_second(
+    case: str, index: int, seed: int, variation: int = 0
+) -> tuple[float, float, float, float, str, list[dict]]:
     amplitude, frequency, heart_rate, quality = _shape(case, index, variation)
+    hrv = _hrv(case, index, variation)
     rng = np.random.default_rng(seed + index * 17)
     motion: list[dict] = []
     magnitudes: list[float] = []
@@ -83,4 +113,4 @@ def synthesize_second(case: str, index: int, seed: int, variation: int = 0) -> t
     rms = math.sqrt(sum(value * value for value in magnitudes) / len(magnitudes))
     mean = sum(magnitudes) / len(magnitudes)
     variance = sum((value - mean) ** 2 for value in magnitudes) / len(magnitudes)
-    return heart_rate, rms, variance, quality, motion
+    return heart_rate, rms, variance, hrv, quality, motion

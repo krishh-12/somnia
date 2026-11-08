@@ -29,6 +29,10 @@
 	</dict>
 	<key>SomniaAPIBaseURL</key>
 	<string>http://149.28.253.209:8090</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Fraunces.ttf</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

@@ -96,6 +96,8 @@ def test_every_third_click_crosses_the_study_bar(tmp_path, monkeypatch) -> None:
     motor = [item for item in runs[2]["readings"] if item["run"] == 2]
     assert max(item["motion_rms"] for item in motor) >= MOTION_BAR
     assert max(item["heart_rate_bpm"] for item in motor) >= heart_rate_bar()
+    turn = [item for item in runs[1]["readings"] if item["run"] == 1]
+    assert min(item["hrv_rmssd"] for item in motor) < min(item["hrv_rmssd"] for item in turn)
     assert runs[2]["motion_bar"] == MOTION_BAR
     assert runs[2]["heart_rate_bar"] == round(heart_rate_bar(), 2)
     with session_factory()() as db:
@@ -120,9 +122,12 @@ def test_anomaly_log_follows_reset(tmp_path, monkeypatch) -> None:
     listed = client.get("/api/v1/logs", headers=headers)
     assert listed.status_code == 200, listed.text
     entries = listed.json()["entries"]
-    assert len(entries) == 1
+    assert [item["kind"] for item in entries] == ["seizure_like", "turn"]
     assert entries[0]["likely"] == "Likely a seizure-like pattern"
+    assert entries[1]["likely"] == "Likely a turn in bed"
     assert entries[0]["source"] == "rules"
+    assert entries[0]["heart_rate_bpm"] > entries[1]["heart_rate_bpm"]
+    assert entries[0]["hrv_rmssd"] < entries[1]["hrv_rmssd"]
     assert "not a diagnosis" in entries[0]["detail"].lower()
     cleared = client.post("/api/v1/demo/reset", headers=headers)
     assert cleared.status_code == 200
@@ -151,6 +156,49 @@ def test_vultr_log_uses_the_model_label(tmp_path, monkeypatch) -> None:
     entry = client.get("/api/v1/logs", headers=headers).json()["entries"][0]
     assert entry["source"] == "vultr"
     assert entry["likely"] == "Likely a seizure-like pattern"
+    assert entry["kind"] == "seizure_like"
+    assert entry["hrv_rmssd"] < 20
+    reset_engine()
+    reset_model_cache()
+
+
+def test_a_period_on_the_vultr_label_is_still_accepted() -> None:
+    from somnia.narrate import _parse_log, _plain_summary
+
+    parsed = _parse_log(
+        '{"likely": "Likely a seizure-like pattern.", '
+        '"detail": "Heart rate rose and variability fell. This is not a diagnosis."}'
+    )
+    assert parsed == (
+        "Likely a seizure-like pattern",
+        "Heart rate rose and variability fell. This is not a diagnosis.",
+    )
+    assert _plain_summary("The night showed a seizure-like pattern.", "This is not a diagnosis.")
+    assert not _plain_summary("This was a seizure.", "This is not a diagnosis.")
+
+
+def test_saved_rule_log_is_rewritten_from_vultr(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path}/somnia.db")
+    monkeypatch.delenv("VULTR_INFERENCE_API_KEY", raising=False)
+    reset_engine()
+    reset_model_cache()
+    client = TestClient(create_app())
+    token = client.post("/api/v1/demo/session", json={"role": "patient"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    client.post("/api/v1/demo/runs", headers=headers, json={"case": "sustained_motor_event"})
+    assert client.get("/api/v1/logs", headers=headers).json()["entries"][0]["source"] == "rules"
+    monkeypatch.setenv("VULTR_INFERENCE_API_KEY", "test-key")
+    monkeypatch.setattr(
+        "somnia.pipeline.describe_event",
+        lambda **_kwargs: (
+            "Likely a seizure-like pattern",
+            "Vultr rewrote this line from the saved measurements. This is not a diagnosis.",
+            "vultr",
+        ),
+    )
+    rewritten = client.get("/api/v1/logs", headers=headers).json()["entries"][0]
+    assert rewritten["source"] == "vultr"
+    assert "Vultr rewrote" in rewritten["detail"]
     reset_engine()
     reset_model_cache()
 

@@ -7,7 +7,7 @@ final class DemoModel {
     var token: String?
     var role = ""
     var displayName = ""
-    var patientName = "Avery Quinn"
+    var patientName = "Krish Hariharan"
     var live: LiveSnapshot?
     var events: [DemoEvent] = []
     var logs: [NightLogEntry] = []

@@ -15,6 +15,7 @@ struct ReadingPoint: Decodable, Identifiable, Sendable {
     var at: Date
     var heartRateBpm: Double?
     var motionRms: Double?
+    var hrvRmssd: Double?
     var score: Double?
     var quality: String
 
@@ -59,12 +60,15 @@ struct EventList: Decodable, Sendable {
 
 struct NightLogEntry: Decodable, Identifiable, Sendable {
     var id: UUID
-    var eventId: UUID
+    var eventId: UUID?
     var at: Date
     var likely: String
     var detail: String
     var source: String
     var kind: String
+    var heartRateBpm: Double?
+    var hrvRmssd: Double?
+    var motionRms: Double?
     var synthetic: Bool
 
     static func compiled(from events: [DemoEvent]) -> [NightLogEntry] {
@@ -76,10 +80,13 @@ struct NightLogEntry: Decodable, Identifiable, Sendable {
                 at: event.startedAt,
                 likely: alarm ? "Likely a seizure-like pattern" : "Likely a heart-rate change",
                 detail: alarm
-                    ? "Movement and heart rate stayed up together. This is not a diagnosis."
-                    : "Heart rate rose without a strong movement pattern. This is not a diagnosis.",
+                    ? "Heart rate rose and heart-rate variability fell while movement stayed strong. This is not a diagnosis."
+                    : "Heart rate rose, variability dipped, and movement stayed quiet. This is not a diagnosis.",
                 source: "rules",
-                kind: event.kind,
+                kind: alarm ? "seizure_like" : "heart_rate",
+                heartRateBpm: nil,
+                hrvRmssd: nil,
+                motionRms: nil,
                 synthetic: event.synthetic
             )
         }

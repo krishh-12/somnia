@@ -11,6 +11,7 @@
 		350D5A3E4C46F7540C8860A8 /* Logo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2A8056096A802C05AB8AA2 /* Logo.swift */; };
 		3AE213B2E6738B151C3B3174 /* API.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF17F783509ED48B491E1B07 /* API.swift */; };
 		414DAEF62FBF32663A76F0A8 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B038F7FCD375750C13D818B0 /* RootView.swift */; };
+		59E2F7FABD43E7FC0A26E48D /* Fraunces.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 3FC8A0456F2C701EEC3A3737 /* Fraunces.ttf */; };
 		5EBB580E809A1862009E67A5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9EAC47BFA24F084C279972BC /* Assets.xcassets */; };
 		64EA97ABC2C2439DCD8EFECD /* AlarmSignal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EC34C35476FDE3DB42ECA95 /* AlarmSignal.swift */; };
 		90648F27EB20D046EC2A2F10 /* DemoModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B41ADFDBCFD20D465A68E49 /* DemoModel.swift */; };
@@ -20,6 +21,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		3FC8A0456F2C701EEC3A3737 /* Fraunces.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Fraunces.ttf; sourceTree = "<group>"; };
 		60DA8B61E1BCB82F7F75F4AA /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		6B41ADFDBCFD20D465A68E49 /* DemoModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoModel.swift; sourceTree = "<group>"; };
 		6CE153AB5B1F7A3F1CCDDBAE /* SomniaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SomniaApp.swift; sourceTree = "<group>"; };
@@ -73,8 +75,17 @@
 				EFC6B9DF2198D0301E4B1D97 /* Sections.swift */,
 				6CE153AB5B1F7A3F1CCDDBAE /* SomniaApp.swift */,
 				60DA8B61E1BCB82F7F75F4AA /* Theme.swift */,
+				BEBD104A86148E224379EF74 /* Fonts */,
 			);
 			path = Somnia;
+			sourceTree = "<group>";
+		};
+		BEBD104A86148E224379EF74 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				3FC8A0456F2C701EEC3A3737 /* Fraunces.ttf */,
+			);
+			path = Fonts;
 			sourceTree = "<group>";
 		};
 		C58CA36422A3625F7018B817 /* Products */ = {
@@ -142,6 +153,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5EBB580E809A1862009E67A5 /* Assets.xcassets in Resources */,
+				59E2F7FABD43E7FC0A26E48D /* Fraunces.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
