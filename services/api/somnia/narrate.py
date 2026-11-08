@@ -31,9 +31,13 @@ class NightBars:
     source: str
 
 
+_care: dict[tuple, str] = {}
+
+
 def clear_cache() -> None:
     global _bars
     _cache.clear()
+    _care.clear()
     _bars = None
 
 
@@ -398,6 +402,109 @@ def _canonical_likely(text: str) -> str | None:
 def _plain_summary(cause: str, action: str) -> bool:
     blob = f"{cause} {action}".lower()
     banned = ("bpm", " mg", "pain", "administered", "medication", "anxiety", "tachycardia", "prescribed", "dosage")
+    if any(word in blob for word in banned):
+        return False
+    return "seizure" not in blob.replace("seizure-like", "")
+
+
+def caregiver_brief(
+    *,
+    waiting: bool,
+    alarms: int,
+    observations: int,
+    common_time: str | None,
+    likelies: tuple[str, ...],
+) -> tuple[str, str]:
+    """One sentence for the person nearby, compiled by Vultr from the saved night."""
+    fallback = _caregiver_fallback(waiting, common_time)
+    if not os.environ.get("VULTR_INFERENCE_API_KEY", "").strip():
+        return fallback, "rules"
+    cache_key = (waiting, alarms, observations, common_time or "", likelies)
+    cached = _care.get(cache_key)
+    if cached is not None:
+        return cached, "vultr"
+    written = _complete_sentence(
+        "Waiting alarm: {waiting}. Alarms: {alarms}. Heart-rate observations: {observations}. "
+        "Usual hour: {hour}. Log labels: {labels}. Cutoff note, do not add numbers: {note}".format(
+            waiting="yes" if waiting else "no",
+            alarms=alarms,
+            observations=observations,
+            hour=common_time or "unknown",
+            labels=", ".join(likelies) if likelies else "none",
+            note=compile_bars().note,
+        ),
+        (
+            "Write one sentence a caregiver can read while watching a night of wearable readings. "
+            "Use only the facts in the user message. "
+            "If an alarm is waiting, tell them to check on the person and stay nearby. "
+            "Do not invent care that was given, medications, or a time that was not provided. "
+            "Do not say seizure. seizure-like is allowed. "
+            'Return JSON with key "brief". '
+            'brief must include the exact words "This is not a diagnosis."'
+        ),
+        "brief",
+    )
+    if written is None:
+        return fallback, "rules"
+    _care[cache_key] = written
+    return written, "vultr"
+
+
+def answer_caregiver(question: str, facts: str) -> tuple[str, str]:
+    """Vultr answers one caregiver question from the saved night."""
+    fallback = (
+        "Use the plan on this screen: see whether an alarm is waiting, keep the usual hour, "
+        "and stay with what the log already says. This is not a diagnosis."
+    )
+    if not os.environ.get("VULTR_INFERENCE_API_KEY", "").strip():
+        return fallback, "rules"
+    written = _complete_sentence(
+        f"Night: {facts}\nQuestion: {question}",
+        (
+            "Answer one caregiver question using only the night in the user message. "
+            "Two sentences at most. "
+            "Do not invent medications, doses, care that was given, or measurements that were not provided. "
+            "Do not say seizure. seizure-like is allowed. "
+            'Return JSON with key "reply". '
+            'reply must include the exact words "This is not a diagnosis."'
+        ),
+        "reply",
+    )
+    if written is None:
+        return fallback, "rules"
+    return written, "vultr"
+
+
+def _caregiver_fallback(waiting: bool, common_time: str | None) -> str:
+    hour = f" The usual hour is {common_time}." if common_time else ""
+    if waiting:
+        return (
+            "An alarm is still waiting. Check on them and stay nearby until they say they are safe."
+            f"{hour} This is not a diagnosis."
+        )
+    return f"No alarm is waiting. The saved night is here if you want to look back at it.{hour} This is not a diagnosis."
+
+
+def _complete_sentence(prompt: str, system: str, key: str) -> str | None:
+    for _ in range(2):
+        content = _post_chat(prompt, system, 1000)
+        if content is None:
+            continue
+        data = _load_json(content)
+        if data is None:
+            continue
+        sentence = " ".join(str(data.get(key, "")).split())
+        if not sentence or not _caregiver_sentence(sentence):
+            continue
+        if "not a diagnosis" not in sentence.lower():
+            sentence = sentence.rstrip(".") + ". This is not a diagnosis."
+        return sentence
+    return None
+
+
+def _caregiver_sentence(text: str) -> bool:
+    blob = text.lower()
+    banned = ("medication", "prescribed", "dosage", " mg", "pain", "administered", "diagnosed")
     if any(word in blob for word in banned):
         return False
     return "seizure" not in blob.replace("seizure-like", "")

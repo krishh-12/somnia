@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from somnia.db import db_session
 from somnia.insights import build_insights
-from somnia.models import AnomalyLog, Event, FeatureWindow
+from somnia.models import AnomalyLog, Event, FeatureWindow, Review
 from somnia.pipeline import (
     FEEDBACK_LABELS,
     acknowledge,
@@ -40,6 +40,10 @@ class RunBody(BaseModel):
 class FeedbackBody(BaseModel):
     label: str = Field(pattern="^(turning_over|awake|unsure)$")
     note: str = ""
+
+
+class AskBody(BaseModel):
+    question: str = ""
 
 
 class SessionOut(BaseModel):
@@ -361,3 +365,86 @@ def feedback(
         note=saved.note,
         review_status=event.review_status if event is not None else "patient_noted",
     )
+
+
+class CaregiverOut(BaseModel):
+    brief: str
+    source: str
+    waiting: bool
+    cause: str
+    action: str
+    common_time: str | None = None
+
+
+class AskOut(BaseModel):
+    reply: str
+    source: str
+
+
+def _require_caregiver(user) -> None:
+    from fastapi import HTTPException
+
+    if user.role != "caregiver":
+        raise HTTPException(status_code=403, detail="The caregiver view reads this night")
+
+
+def _caregiver_night(db: Session) -> tuple[dict, tuple[str, ...], str]:
+    insight = build_insights(db)
+    ensure_logs(db)
+    rows = db.scalars(select(AnomalyLog).order_by(AnomalyLog.started_at.desc()).limit(6)).all()
+    likelies = tuple(row.likely for row in rows)
+    notes = [
+        " ".join(review.note.split())
+        for review in db.scalars(select(Review).order_by(Review.created_at.desc()).limit(4)).all()
+        if review.note.strip()
+    ]
+    facts = (
+        f"Waiting alarm: {'yes' if insight['waiting_count'] else 'no'}. "
+        f"Alarms: {insight['week_alarms']}. Heart-rate observations: {insight['week_observations']}. "
+        f"Usual hour: {insight['common_time'] or 'unknown'}. "
+        f"Summary: {insight['cause']} {insight['action']} "
+        f"Log labels: {', '.join(likelies) if likelies else 'none'}. "
+        f"Notes: {'; '.join(notes) if notes else 'none'}."
+    )
+    return insight, likelies, facts
+
+
+@router.get("/caregiver", response_model=CaregiverOut)
+def caregiver_view(user=Depends(current_user), db: Session = Depends(db_session)) -> CaregiverOut:
+    from somnia.narrate import caregiver_brief
+
+    _require_caregiver(user)
+    insight, likelies, _facts = _caregiver_night(db)
+    waiting = insight["waiting_count"] > 0
+    brief, source = caregiver_brief(
+        waiting=waiting,
+        alarms=insight["week_alarms"],
+        observations=insight["week_observations"],
+        common_time=insight["common_time"],
+        likelies=likelies,
+    )
+    return CaregiverOut(
+        brief=brief,
+        source=source,
+        waiting=waiting,
+        cause=insight["cause"],
+        action=insight["action"],
+        common_time=insight["common_time"],
+    )
+
+
+@router.post("/caregiver/ask", response_model=AskOut)
+def caregiver_ask(body: AskBody, user=Depends(current_user), db: Session = Depends(db_session)) -> AskOut:
+    from fastapi import HTTPException
+
+    from somnia.narrate import answer_caregiver
+
+    _require_caregiver(user)
+    question = " ".join(body.question.split())
+    if not question:
+        raise HTTPException(status_code=422, detail="Ask about the saved night")
+    if len(question) > 280:
+        raise HTTPException(status_code=422, detail="The question is limited to 280 characters")
+    _insight, _likelies, facts = _caregiver_night(db)
+    reply, source = answer_caregiver(question[:280], facts)
+    return AskOut(reply=reply, source=source)

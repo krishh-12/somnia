@@ -20,6 +20,10 @@ final class DemoModel {
     var confirmReset = false
     var showFeedback = false
     var feedbackEventId: UUID?
+    var caregiverBrief = ""
+    var caregiverSource = ""
+    var caregiverReply = ""
+    var caregiverReplySource = ""
 
     var baseURL: URL {
         if let raw = Bundle.main.object(forInfoDictionaryKey: "SomniaAPIBaseURL") as? String,
@@ -55,6 +59,8 @@ final class DemoModel {
             alarmRaisedThisSession = false
             showFeedback = false
             feedbackEventId = nil
+            caregiverReply = ""
+            caregiverReplySource = ""
             try await reload()
         } catch SomniaAPIError.offline {
             status = "The iPhone cannot reach the somnia service at \(baseURL.host ?? "the server"). Start it, then try again."
@@ -74,6 +80,10 @@ final class DemoModel {
             logs = fetched
         } else {
             logs = NightLogEntry.compiled(from: events)
+        }
+        if role == "caregiver", let brief = try? await api.caregiver() {
+            caregiverBrief = brief.brief
+            caregiverSource = brief.source
         }
     }
 
@@ -162,6 +172,26 @@ final class DemoModel {
         }
         busy = false
         return false
+    }
+
+    func askCaregiver(_ question: String) async {
+        guard role == "caregiver" else { return }
+        let trimmed = String(question.prefix(280)).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        busy = true
+        status = ""
+        do {
+            let answer = try await api.askCaregiver(question: trimmed)
+            caregiverReply = answer.reply
+            caregiverReplySource = answer.source
+        } catch SomniaAPIError.offline {
+            status = "The somnia service is unreachable."
+        } catch SomniaAPIError.message(let text) {
+            status = text
+        } catch {
+            status = "The question could not be answered."
+        }
+        busy = false
     }
 
     func resetData() async {

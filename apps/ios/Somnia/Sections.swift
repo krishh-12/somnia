@@ -89,11 +89,6 @@ struct InsightsView: View {
                             Text("Sources: CDC seizure first aid, and Harden et al., Neurology, 2017, a guideline from the American Academy of Neurology and the American Epilepsy Society. The guideline’s nighttime-supervision suggestion is for selected people who already have frequent convulsive seizures. Krish’s nights here are synthetic. This is not a diagnosis or a clinician’s order.")
                                 .font(.somnia(.footnote))
                         }
-                        if insights.synthetic {
-                            Text("The counts come from saved synthetic nights.")
-                                .font(.somnia(.footnote))
-                                .foregroundStyle(Night.muted)
-                        }
                     } else {
                         Text(model.status.isEmpty ? "Loading the night summary…" : model.status)
                             .foregroundStyle(Night.muted)
@@ -342,9 +337,6 @@ struct ProfileView: View {
                             .padding(.vertical, 8)
                     }
                     .buttonStyle(NeuButtonStyle())
-                    Text("somnia is a prototype. It does not diagnose seizures, predict events, or replace medical care. On iPhone the alarm plays a sound and a haptic while its screen is open. It is not a locked-phone alarm.")
-                        .font(.somnia(.footnote))
-                        .foregroundStyle(Night.muted)
                     Button("Leave demo", role: .destructive) {
                         model.leave()
                     }

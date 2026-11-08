@@ -109,6 +109,20 @@ struct EventFeedback: Decodable, Sendable {
     var reviewStatus: String
 }
 
+struct CaregiverBrief: Decodable, Sendable {
+    var brief: String
+    var source: String
+    var waiting: Bool
+    var cause: String
+    var action: String
+    var commonTime: String?
+}
+
+struct CaregiverReply: Decodable, Sendable {
+    var reply: String
+    var source: String
+}
+
 struct NightInsights: Decodable, Sendable {
     var tonightCount: Int
     var weekCount: Int
@@ -171,6 +185,14 @@ struct SomniaAPI {
 
     func reset() async throws -> LiveSnapshot {
         try await send(path: "/api/v1/demo/reset", method: "POST", body: Optional<[String: String]>.none, authorize: true)
+    }
+
+    func caregiver() async throws -> CaregiverBrief {
+        try await send(path: "/api/v1/caregiver", method: "GET", body: Optional<[String: String]>.none, authorize: true)
+    }
+
+    func askCaregiver(question: String) async throws -> CaregiverReply {
+        try await send(path: "/api/v1/caregiver/ask", method: "POST", body: ["question": question], authorize: true)
     }
 
     private func send<Response: Decodable>(

@@ -287,6 +287,47 @@ def test_heart_rate_only_is_an_observation(tmp_path, monkeypatch) -> None:
     reset_model_cache()
 
 
+def test_caregiver_reads_a_vultr_brief_and_can_ask(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path}/somnia.db")
+    monkeypatch.delenv("VULTR_INFERENCE_API_KEY", raising=False)
+    from somnia.narrate import clear_cache
+
+    clear_cache()
+    reset_engine()
+    reset_model_cache()
+    client = TestClient(create_app())
+    patient = client.post("/api/v1/demo/session", json={"role": "patient"}).json()["access_token"]
+    caregiver = client.post("/api/v1/demo/session", json={"role": "caregiver"}).json()["access_token"]
+    motor = client.post(
+        "/api/v1/demo/runs",
+        headers={"Authorization": f"Bearer {patient}"},
+        json={"case": "sustained_motor_event"},
+    )
+    assert motor.status_code == 200, motor.text
+    denied = client.get("/api/v1/caregiver", headers={"Authorization": f"Bearer {patient}"})
+    assert denied.status_code == 403
+    brief = client.get("/api/v1/caregiver", headers={"Authorization": f"Bearer {caregiver}"})
+    assert brief.status_code == 200, brief.text
+    body = brief.json()
+    assert body["waiting"] is True
+    assert body["source"] == "rules"
+    assert "alarm is still waiting" in body["brief"].lower()
+    assert body["action"]
+    empty = client.post("/api/v1/caregiver/ask", headers={"Authorization": f"Bearer {caregiver}"}, json={"question": "  "})
+    assert empty.status_code == 422
+    asked = client.post(
+        "/api/v1/caregiver/ask",
+        headers={"Authorization": f"Bearer {caregiver}"},
+        json={"question": "What should I do while this is waiting?"},
+    )
+    assert asked.status_code == 200, asked.text
+    answer = asked.json()
+    assert answer["source"] == "rules"
+    assert "plan" in answer["reply"].lower()
+    reset_engine()
+    reset_model_cache()
+
+
 def test_vultr_cutoff_estimates_stay_inside_the_demo(monkeypatch) -> None:
     from somnia.narrate import _parse_bars, clear_cache, compile_bars
 

@@ -203,9 +203,6 @@ struct PatientHome: View {
                             .font(.somnia(.footnote))
                             .foregroundStyle(Night.danger)
                     }
-                    Text("Prototype only. This does not diagnose seizures. The alarm stays on this screen.")
-                        .font(.somnia(.footnote))
-                        .foregroundStyle(Night.muted)
                 }
                 .padding(20)
             }
