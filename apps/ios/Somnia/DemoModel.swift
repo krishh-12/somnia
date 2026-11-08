@@ -10,6 +10,7 @@ final class DemoModel {
     var patientName = "Avery Quinn"
     var live: LiveSnapshot?
     var events: [DemoEvent] = []
+    var logs: [NightLogEntry] = []
     var insights: NightInsights?
     var busy = false
     var status = ""
@@ -56,7 +57,7 @@ final class DemoModel {
             feedbackEventId = nil
             try await reload()
         } catch SomniaAPIError.offline {
-            status = "The iPhone cannot reach the Somnia service at \(baseURL.host ?? "the server"). Start it, then try again."
+            status = "The iPhone cannot reach the somnia service at \(baseURL.host ?? "the server"). Start it, then try again."
         } catch SomniaAPIError.message(let text) {
             status = text
         } catch {
@@ -69,6 +70,11 @@ final class DemoModel {
         live = try await api.live()
         events = try await api.events()
         insights = try await api.insights()
+        if let fetched = try? await api.logs() {
+            logs = fetched
+        } else {
+            logs = NightLogEntry.compiled(from: events)
+        }
     }
 
     func refresh() async {
@@ -77,7 +83,7 @@ final class DemoModel {
             try await reload()
             status = ""
         } catch SomniaAPIError.offline {
-            status = "The Somnia service is unreachable."
+            status = "The somnia service is unreachable."
         } catch SomniaAPIError.message(let text) {
             status = text
         } catch {
@@ -165,6 +171,7 @@ final class DemoModel {
         do {
             live = try await api.reset()
             events = []
+            logs = []
             insights = try await api.insights()
             alarmRaisedThisSession = false
             presentedAlarm = nil
@@ -183,6 +190,7 @@ final class DemoModel {
         role = ""
         live = nil
         events = []
+        logs = []
         status = ""
         presentedAlarm = nil
         alarmRaisedThisSession = false

@@ -8,9 +8,9 @@ struct SomniaApp: App {
         let navigation = UINavigationBarAppearance()
         navigation.configureWithOpaqueBackground()
         navigation.backgroundColor = background
-        let titleFont = UIFont.systemFont(ofSize: 17, weight: .semibold).fontDescriptor.withDesign(.serif)
+        let titleFont = UIFont.systemFont(ofSize: 17, weight: .semibold).fontDescriptor.withDesign(.rounded)
             .map { UIFont(descriptor: $0, size: 17) } ?? UIFont.systemFont(ofSize: 17, weight: .semibold)
-        let tabFont = UIFont.systemFont(ofSize: 10, weight: .medium).fontDescriptor.withDesign(.serif)
+        let tabFont = UIFont.systemFont(ofSize: 10, weight: .medium).fontDescriptor.withDesign(.rounded)
             .map { UIFont(descriptor: $0, size: 10) } ?? UIFont.systemFont(ofSize: 10, weight: .medium)
         navigation.titleTextAttributes = [.foregroundColor: UIColor.white, .font: titleFont]
         UINavigationBar.appearance().standardAppearance = navigation

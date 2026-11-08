@@ -29,7 +29,7 @@ struct PatientHome: View {
                             Text("Alarm is still on")
                                 .font(.somnia(.headline, weight: .semibold))
                                 .foregroundStyle(.white)
-                            Text("If you do not say you are okay, Somnia will notify your caregiver and physician.")
+                            Text("If you do not say you are okay, somnia will notify your caregiver and physician.")
                                 .foregroundStyle(.white.opacity(0.85))
                             Button {
                                 Task { await model.acknowledge() }
@@ -58,7 +58,7 @@ struct PatientHome: View {
                     NightCard {
                         Text("Movement through the night")
                             .font(.somnia(.headline, weight: .semibold))
-                        Text("Across is time of night. Up is stronger movement.")
+                        Text("Across is time of night. Up is stronger movement. The dashed line is sustained strong movement.")
                             .font(.somnia(.footnote))
                             .foregroundStyle(Night.muted)
                         if readings.isEmpty {
@@ -66,22 +66,27 @@ struct PatientHome: View {
                                 .foregroundStyle(Night.muted)
                                 .frame(maxWidth: .infinity, minHeight: 160, alignment: .center)
                         } else {
-                            Chart(readings) { point in
-                                if let motion = point.motionRms {
-                                    LineMark(
-                                        x: .value("Time of night", point.at),
-                                        y: .value("Motion (m/s²)", motion),
-                                        series: .value("Run", point.run)
-                                    )
-                                    .foregroundStyle(Night.pink)
-                                    .interpolationMethod(.catmullRom)
-                                    if motion >= 1 {
-                                        PointMark(
+                            Chart {
+                                RuleMark(y: .value("Sustained movement", motionBar))
+                                    .foregroundStyle(Night.danger.opacity(0.85))
+                                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+                                ForEach(readings) { point in
+                                    if let motion = point.motionRms {
+                                        LineMark(
                                             x: .value("Time of night", point.at),
-                                            y: .value("Motion (m/s²)", motion)
+                                            y: .value("Motion (m/s²)", motion),
+                                            series: .value("Run", point.run)
                                         )
-                                        .foregroundStyle(Night.danger)
-                                        .symbolSize(40)
+                                        .foregroundStyle(Night.pink)
+                                        .interpolationMethod(.catmullRom)
+                                        if motion >= motionBar, (point.heartRateBpm ?? 0) >= heartBar {
+                                            PointMark(
+                                                x: .value("Time of night", point.at),
+                                                y: .value("Motion (m/s²)", motion)
+                                            )
+                                            .foregroundStyle(Night.danger)
+                                            .symbolSize(40)
+                                        }
                                     }
                                 }
                             }
@@ -100,14 +105,14 @@ struct PatientHome: View {
                             .chartYAxis { AxisMarks(position: .leading) }
                             .frame(maxWidth: .infinity)
                             .frame(height: 190)
-                            Text("\(readings.count) saved samples. A new test extends this graph.")
+                            Text("\(readings.count) saved samples. A new test extends this graph. Every third one is the seizure-like pattern. Red points also need heart rate at least 20% above baseline, the low end of the 20–70% rise used in cardiac seizure detection. A 2013 wrist-accelerometer study flagged convulsive seizures when strong movement kept going. A turn stays under the line. This is not a diagnosis.")
                                 .font(.somnia(.footnote))
                                 .foregroundStyle(Night.muted)
                         }
                     }
 
                     Button {
-                        Task { await model.run(caseName: "sustained_motor_event") }
+                        Task { await model.run(caseName: nextCase) }
                     } label: {
                         Text(model.busy ? "Scoring…" : "Run anomaly")
                             .font(.somnia(.headline, weight: .semibold))
@@ -151,13 +156,13 @@ struct PatientHome: View {
                 .padding(20)
             }
             .background(Night.background)
-            .navigationTitle("Somnia")
+            .navigationTitle("somnia")
             .navigationBarTitleDisplayMode(.inline)
             .confirmationDialog("Reset the saved graph?", isPresented: $model.confirmReset, titleVisibility: .visible) {
                 Button("Reset data", role: .destructive) { Task { await model.resetData() } }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This clears the compounded readings and alarms on the server.")
+                Text("This clears the graph, the alarms, and the log on the server.")
             }
             .sheet(isPresented: $model.showWearable) {
                 WearableSheet()
@@ -166,6 +171,17 @@ struct PatientHome: View {
     }
 
     private var readings: [ReadingPoint] { model.live?.readings ?? [] }
+    private var motionBar: Double { model.live?.motionBar ?? 3.5 }
+    private var heartBar: Double { model.live?.heartRateBar ?? (model.live?.baselineHr ?? 62) * 1.2 }
+
+    /// The 3rd, 6th, and 9th saved runs are the seizure-like pattern. The others rotate.
+    private var nextCase: String {
+        let click = Set(readings.map(\.run)).count + 1
+        if click % 3 == 0 { return "sustained_motor_event" }
+        let varied = ["normal_sleep", "turn_in_bed", "hr_only"]
+        let slot = click - (click / 3) - 1
+        return varied[slot % varied.count]
+    }
     private var latest: ReadingPoint? { readings.last }
 
     private var heartText: String {

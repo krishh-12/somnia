@@ -13,13 +13,15 @@ from somnia.models import (
     FeatureWindow,
     ModelVersion,
     MonitoringSession,
+    NightLog,
     Patient,
     Review,
     SensorBatch,
     User,
 )
+from somnia.narrate import describe_event
 
-from somnia.signals import CASES, SECONDS, synthesize_second
+from somnia.signals import CASES, HR_RISE, MOTION_BAR, SECONDS, heart_rate_bar, synthesize_second
 
 FEEDBACK_LABELS = {
     "turning_over": "I was turning over",
@@ -166,7 +168,7 @@ def run_case(db: Session, case: str, seed: int = MODEL_SEED) -> MonitoringSessio
     hr_streak = 0
     open_event: Event | None = None
     for index in range(SECONDS):
-        heart_rate, motion_rms, motion_var, quality, motion = synthesize_second(case, index, seed)
+        heart_rate, motion_rms, motion_var, quality, motion = synthesize_second(case, index, seed, int(prior))
         moment = started + timedelta(minutes=index * 2)
         score = anomaly_score(cached.model, heart_rate, motion_rms, motion_var)
         features = {
@@ -201,8 +203,8 @@ def run_case(db: Session, case: str, seed: int = MODEL_SEED) -> MonitoringSessio
                 model_id=cached.model_id,
             )
         )
-        qualifying = score >= cached.threshold and motion_rms >= 1.0 and heart_rate >= BASELINE_HR + 20
-        hr_only = heart_rate >= BASELINE_HR + 25 and motion_rms < 0.5
+        qualifying = motion_rms >= MOTION_BAR and heart_rate >= BASELINE_HR * (1 + HR_RISE)
+        hr_only = heart_rate >= heart_rate_bar(BASELINE_HR) and motion_rms < MOTION_BAR
         if qualifying:
             streak += 1
             calm = 0
@@ -221,6 +223,7 @@ def run_case(db: Session, case: str, seed: int = MODEL_SEED) -> MonitoringSessio
                     synthetic=True,
                 )
                 db.add(open_event)
+                _save_log(db, open_event, heart_rate, motion_rms)
             elif open_event is not None and score > (open_event.score_peak or 0):
                 open_event.score_peak = score
         elif hr_only:
@@ -240,6 +243,7 @@ def run_case(db: Session, case: str, seed: int = MODEL_SEED) -> MonitoringSessio
                     synthetic=True,
                 )
                 db.add(open_event)
+                _save_log(db, open_event, heart_rate, motion_rms)
         else:
             streak = 0
             hr_streak = 0
@@ -272,9 +276,33 @@ def compounded_readings(db: Session) -> list[tuple[int, FeatureWindow]]:
     return rows
 
 
+def _save_log(db: Session, event: Event, heart_rate: float, motion_rms: float) -> None:
+    db.flush()
+    likely, detail, source = describe_event(
+        kind=event.kind,
+        score=event.score_peak or 0,
+        heart_rate=heart_rate,
+        motion_rms=motion_rms,
+    )
+    db.add(NightLog(event_id=event.id, likely=likely, detail=detail, source=source))
+
+
+def ensure_logs(db: Session) -> None:
+    from somnia.narrate import rule_log
+
+    events = db.scalars(select(Event)).all()
+    have = set(db.scalars(select(NightLog.event_id)).all())
+    for event in events:
+        if event.id in have or event.kind not in ("alarm", "observation"):
+            continue
+        likely, detail = rule_log(event.kind)
+        db.add(NightLog(event_id=event.id, likely=likely, detail=detail, source="rules"))
+    db.commit()
+
+
 def reset_demo_data(db: Session) -> None:
     ensure_ready(db)
-    for table in (Review, Event, FeatureWindow, SensorBatch, MonitoringSession):
+    for table in (NightLog, Review, Event, FeatureWindow, SensorBatch, MonitoringSession):
         db.execute(delete(table))
     db.commit()
 

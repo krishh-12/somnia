@@ -24,7 +24,7 @@ targets:
     info:
       path: apps/ios/Somnia/Info.plist
       properties:
-        CFBundleDisplayName: Somnia
+        CFBundleDisplayName: somnia
         CFBundleIconName: AppIcon
         UILaunchScreen: {}
         SomniaAPIBaseURL: http://149.28.253.209:8090

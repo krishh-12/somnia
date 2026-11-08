@@ -53,31 +53,33 @@ struct InsightsView: View {
                             countCard("Tonight", value: insights.tonightCount, caption: "anomalies")
                             countCard("This week", value: insights.weekCount, caption: "anomalies")
                         }
-                        InsightModule(title: "Sleep window", detail: model.live?.sleepWindow ?? "Not loaded") {
-                            Text("The modules below use saved events from this window and the last seven days.")
-                        }
-                        InsightModule(title: "Tonight", detail: tonightDetail(insights)) {
+                        Text("Tap a header to open it.")
+                            .font(.somnia(.footnote))
+                            .foregroundStyle(Night.muted)
+                        Fold(title: "Tonight", summary: tonightDetail(insights)) {
+                            Text(model.live?.sleepWindow ?? "Sleep window not loaded")
                             Text(insights.tonightCount == 0 ? "Nothing saved in the current sleep window." : "An alarm needs movement and a higher heart rate. An observation is heart rate alone.")
                         }
-                        InsightModule(title: "This week", detail: weekDetail()) {
+                        Fold(title: "This week", summary: weekDetail()) {
                             Text(weekCaption())
                         }
-                        InsightModule(title: "Most common time", detail: insights.commonTime ?? "Not enough yet") {
+                        Fold(title: "Usual hour", summary: insights.commonTime ?? "Not enough yet") {
                             Text(commonDetail(insights))
                         }
-                        InsightModule(title: "What may be going on", detail: nil) {
+                        Fold(title: "Written summary", summary: insights.narration == "vultr" ? "From a Vultr model" : "Fixed sentences") {
                             Text(insights.cause)
-                        }
-                        InsightModule(title: "What to do", detail: nil) {
                             Text(insights.action)
+                            Text(insights.narration == "vultr" ? "A Vultr model wrote these two paragraphs from the counts. It did not produce the score. This is not a diagnosis." : "These sentences are the backup wording. This is not a diagnosis.")
                         }
-                        if insights.narration == "vultr" {
-                            Text("The two written sections come from a Vultr model. The counts, score, and times do not. This is not a diagnosis.")
+                        Fold(title: "Plan for Avery", summary: planSummary(insights)) {
+                            ForEach(Array(planSteps(insights).enumerated()), id: \.offset) { index, step in
+                                Text("\(index + 1). \(step)")
+                            }
+                            Text("Sources: CDC seizure first aid, and Harden et al., Neurology, 2017, a guideline from the American Academy of Neurology and the American Epilepsy Society. The guideline’s nighttime-supervision suggestion is for selected people who already have frequent convulsive seizures. Avery’s nights here are synthetic. This is not a diagnosis or a clinician’s order.")
                                 .font(.somnia(.footnote))
-                                .foregroundStyle(Night.pink)
                         }
                         if insights.synthetic {
-                            Text("These modules use saved synthetic nights.")
+                            Text("The counts come from saved synthetic nights.")
                                 .font(.somnia(.footnote))
                                 .foregroundStyle(Night.muted)
                         }
@@ -158,25 +160,116 @@ struct InsightsView: View {
         let noun = insights.commonTimeCount == 1 ? "anomaly" : "anomalies"
         return "\(insights.commonTimeCount) \(noun) this week started in that hour."
     }
+
+    private func planSummary(_ insights: NightInsights) -> String {
+        insights.hasData ? "Steps from this week’s nights" : "Needs a saved night"
+    }
+
+    private func planSteps(_ insights: NightInsights) -> [String] {
+        guard insights.hasData else {
+            return ["Run a test from Home. The plan uses the saved counts, the usual hour, and the written summary."]
+        }
+        var steps: [String] = []
+        let alarms = model.events.filter { $0.kind == "alarm" }.count
+        let noted = model.events.filter { $0.reviewStatus == "patient_noted" }.count
+        if alarms > 0 {
+            steps.append("If the red screen is up and you are safe, tap I’m okay. That means you are safe. It does not decide whether the pattern was a seizure.")
+        }
+        if let hour = insights.commonTime {
+            steps.append("\(hour) is the hour that shows up most in the saved nights. Keep that hour, and the \(model.live?.sleepWindow ?? "sleep window"), in a note for a clinician.")
+        }
+        steps.append(insights.action)
+        if noted > 0 {
+            let noun = noted == 1 ? "event has" : "events have"
+            steps.append("\(noted) \(noun) a saved note about what was happening. The note does not change the score, and a physician has not reviewed it yet.")
+        }
+        steps.append("The caregiver screen is who this demo says it will notify if an alarm stays on. A 2017 guideline found that, for some people who already have frequent convulsive seizures at night, having another person nearby or a listening device was associated with lower sudden-death risk. That finding is not a risk score for Avery.")
+        steps.append("CDC first aid says to call emergency services if a seizure lasts longer than 5 minutes, another starts soon after, breathing or waking is difficult, there is an injury, it happens in water, or the person has never had a seizure before.")
+        return steps
+    }
 }
 
-private struct InsightModule<Detail: View>: View {
+private struct Fold<Content: View>: View {
     var title: String
-    var detail: String?
-    @ViewBuilder var note: () -> Detail
+    var summary: String
+    @ViewBuilder var content: () -> Content
+    @State private var open = false
 
     var body: some View {
-        NightCard {
-            Text(title)
-                .font(.somnia(.subheadline))
-                .foregroundStyle(Night.pink)
-            if let detail {
-                Text(detail)
-                    .font(.somnia(.title3, weight: .semibold))
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.22)) { open.toggle() }
+            } label: {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .font(.somnia(.subheadline))
+                            .foregroundStyle(Night.pink)
+                        Text(summary)
+                            .font(.somnia(.headline, weight: .semibold))
+                            .foregroundStyle(Night.text)
+                            .multilineTextAlignment(.leading)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: open ? "chevron.up" : "chevron.down")
+                        .font(.somnia(.subheadline, weight: .semibold))
+                        .foregroundStyle(Night.pink)
+                        .padding(.top, 4)
+                }
             }
-            note()
-                .font(.somnia(.footnote))
+            .buttonStyle(.plain)
+            .accessibilityHint(open ? "Hides the details" : "Shows the details")
+            if open {
+                VStack(alignment: .leading, spacing: 10) {
+                    content()
+                }
+                .font(.somnia(.body))
                 .foregroundStyle(Night.muted)
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Night.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+}
+
+struct LogView: View {
+    @Bindable var model: DemoModel
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if model.logs.isEmpty {
+                        Text("No anomalies logged yet. A saved alarm or heart-rate change appears here.")
+                            .foregroundStyle(Night.muted)
+                    } else {
+                        ForEach(model.logs) { entry in
+                            NightCard {
+                                Text(entry.at, format: .dateTime.hour().minute())
+                                    .font(.somnia(.footnote))
+                                    .foregroundStyle(Night.muted)
+                                Text(entry.likely)
+                                    .font(.somnia(.headline, weight: .semibold))
+                                    .foregroundStyle(Night.pink)
+                                Text(entry.detail)
+                                Text(entry.source == "vultr" ? "Compiled by a Vultr model. This is not a diagnosis." : "Fixed wording. A Vultr model was not used for this line.")
+                                    .font(.somnia(.footnote))
+                                    .foregroundStyle(entry.source == "vultr" ? Night.pink : Night.muted)
+                                if entry.synthetic {
+                                    Text("Synthetic night")
+                                        .font(.somnia(.footnote))
+                                        .foregroundStyle(Night.muted)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(20)
+            }
+            .background(Night.background)
+            .navigationTitle("Log")
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 }
@@ -217,7 +310,7 @@ struct ProfileView: View {
                     }
                     .buttonStyle(.bordered)
                     .tint(Night.indigo)
-                    Text("Somnia is a prototype. It does not diagnose seizures, predict events, or replace medical care. On iPhone the alarm plays a sound and a haptic while its screen is open. It is not a locked-phone alarm.")
+                    Text("somnia is a prototype. It does not diagnose seizures, predict events, or replace medical care. On iPhone the alarm plays a sound and a haptic while its screen is open. It is not a locked-phone alarm.")
                         .font(.somnia(.footnote))
                         .foregroundStyle(Night.muted)
                     Button("Leave demo", role: .destructive) {
@@ -253,7 +346,7 @@ struct FeedbackSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("Choose the closest description. A note is optional. Somnia saves this with the event for a later review. It does not change the score, and it is not a diagnosis.")
+                    Text("Choose the closest description. A note is optional. somnia saves this with the event for a later review. It does not change the score, and it is not a diagnosis.")
                         .foregroundStyle(Night.muted)
                     ForEach(choices, id: \.0) { key, title in
                         Button {
@@ -335,7 +428,7 @@ struct AlarmView: View {
                 Text("Possible seizure-like event")
                     .font(.somnia(.title, weight: .semibold))
                     .foregroundStyle(.white)
-                Text("If you do not say you are okay, Somnia will notify your caregiver and physician.")
+                Text("If you do not say you are okay, somnia will notify your caregiver and physician.")
                     .font(.somnia(.title3))
                     .foregroundStyle(.white.opacity(0.92))
                 Text(event.reason)

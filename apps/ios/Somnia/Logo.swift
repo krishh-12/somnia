@@ -58,7 +58,7 @@ struct SomniaLogo: View {
                 style: StrokeStyle(lineWidth: radius * 0.07, lineCap: .round, lineJoin: .round)
             )
         }
-        .accessibilityLabel("Somnia logo, a moon wrapped around a pulse")
+        .accessibilityLabel("somnia logo, a moon wrapped around a pulse")
     }
 }
 
@@ -76,7 +76,7 @@ struct OpeningView: View {
                 SomniaLogo(draw: draw, settled: settled)
                     .frame(width: 168, height: 168)
                     .scaleEffect(0.92 + settled * 0.08)
-                Text("Somnia")
+                Text("somnia")
                     .font(.somnia(size: 34, weight: .semibold))
                     .foregroundStyle(Night.pink.opacity(title ? 1 : 0))
             }

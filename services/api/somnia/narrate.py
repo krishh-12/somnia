@@ -144,6 +144,109 @@ def _parse(content: str) -> tuple[str, str] | None:
     return cause, action
 
 
+LIKELY = {
+    "alarm": "Likely a seizure-like pattern",
+    "observation": "Likely a heart-rate change",
+}
+
+
+def rule_log(kind: str) -> tuple[str, str]:
+    if kind == "alarm":
+        return (
+            LIKELY["alarm"],
+            "Movement and heart rate stayed up together. This is not a diagnosis.",
+        )
+    return (
+        LIKELY["observation"],
+        "Heart rate rose without a strong movement pattern. This is not a diagnosis.",
+    )
+
+
+def describe_event(*, kind: str, score: float, heart_rate: float, motion_rms: float) -> tuple[str, str, str]:
+    fallback = rule_log(kind)
+    if not os.environ.get("VULTR_INFERENCE_API_KEY", "").strip():
+        return (*fallback, "rules")
+    written = _complete_log(
+        f"Required likely label: {fallback[0]}. "
+        f"Peak anomaly score: {score:.2f}. Heart rate: {heart_rate:.0f}. "
+        f"Motion rms: {motion_rms:.2f}. Synthetic demo reading."
+    )
+    if written is None:
+        return (*fallback, "rules")
+    return (*written, "vultr")
+
+
+def _complete_log(prompt: str) -> tuple[str, str] | None:
+    key = os.environ.get("VULTR_INFERENCE_API_KEY", "").strip()
+    if not key:
+        return None
+    model = os.environ.get("VULTR_INFERENCE_MODEL", "qwen3.8-flash-next")
+    allowed = ", ".join(LIKELY.values())
+    body = json.dumps(
+        {
+            "model": model,
+            "temperature": 0.2,
+            "max_tokens": 500,
+            "reasoning_effort": "minimal",
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Label one synthetic demo anomaly for a log. "
+                        f"The likely value must be exactly one of: {allowed}. "
+                        "Use the required likely label from the user message. "
+                        "detail is one sentence and must include the exact words "
+                        '"This is not a diagnosis." '
+                        "Do not name a disease, medicine, or dose. "
+                        "Do not say the pattern is a seizure. seizure-like is allowed only inside the required label."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+        }
+    ).encode()
+    request = urllib.request.Request(
+        "https://api.vultrinference.com/v1/chat/completions",
+        data=body,
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            payload = json.loads(response.read().decode())
+        content = payload["choices"][0]["message"]["content"]
+    except Exception:
+        return None
+    return _parse_log(content)
+
+
+def _parse_log(content: str) -> tuple[str, str] | None:
+    text = content.strip()
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        start, end = text.find("{"), text.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        try:
+            data = json.loads(text[start : end + 1])
+        except json.JSONDecodeError:
+            return None
+    likely = str(data.get("likely", "")).strip()
+    detail = str(data.get("detail", "")).strip()
+    if likely not in LIKELY.values() or not detail:
+        return None
+    if "not a diagnosis" not in detail.lower():
+        detail = detail.rstrip(".") + ". This is not a diagnosis."
+    blob = detail.lower()
+    if any(word in blob for word in ("diagnosed", "epilepsy", "medication", "prescribed", "dosage")):
+        return None
+    if "seizure" in blob and "seizure-like" not in blob:
+        return None
+    return likely, detail
+
+
 def _plain_summary(cause: str, action: str) -> bool:
     blob = f"{cause} {action}".lower()
     banned = ("bpm", " mg", "pain", "administered", "medication", "anxiety", "tachycardia", "prescribed", "dosage", "seizure")

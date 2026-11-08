@@ -45,6 +45,8 @@ struct LiveSnapshot: Decodable, Sendable {
     var wearableLabel: String
     var baselineHr: Double
     var modelThreshold: Double?
+    var motionBar: Double?
+    var heartRateBar: Double?
     var demoCase: String?
     var synthetic: Bool
     var readings: [ReadingPoint]
@@ -53,6 +55,39 @@ struct LiveSnapshot: Decodable, Sendable {
 
 struct EventList: Decodable, Sendable {
     var events: [DemoEvent]
+}
+
+struct NightLogEntry: Decodable, Identifiable, Sendable {
+    var id: UUID
+    var eventId: UUID
+    var at: Date
+    var likely: String
+    var detail: String
+    var source: String
+    var kind: String
+    var synthetic: Bool
+
+    static func compiled(from events: [DemoEvent]) -> [NightLogEntry] {
+        events.filter { $0.kind == "alarm" || $0.kind == "observation" }.map { event in
+            let alarm = event.kind == "alarm"
+            return NightLogEntry(
+                id: event.id,
+                eventId: event.id,
+                at: event.startedAt,
+                likely: alarm ? "Likely a seizure-like pattern" : "Likely a heart-rate change",
+                detail: alarm
+                    ? "Movement and heart rate stayed up together. This is not a diagnosis."
+                    : "Heart rate rose without a strong movement pattern. This is not a diagnosis.",
+                source: "rules",
+                kind: event.kind,
+                synthetic: event.synthetic
+            )
+        }
+    }
+}
+
+struct LogList: Decodable, Sendable {
+    var entries: [NightLogEntry]
 }
 
 struct EventFeedback: Decodable, Sendable {
@@ -99,6 +134,11 @@ struct SomniaAPI {
 
     func insights() async throws -> NightInsights {
         try await send(path: "/api/v1/insights", method: "GET", body: Optional<[String: String]>.none, authorize: true)
+    }
+
+    func logs() async throws -> [NightLogEntry] {
+        let list: LogList = try await send(path: "/api/v1/logs", method: "GET", body: Optional<[String: String]>.none, authorize: true)
+        return list.entries
     }
 
     func events() async throws -> [DemoEvent] {

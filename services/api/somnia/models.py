@@ -118,6 +118,17 @@ class Event(Base):
     synthetic: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class NightLog(Base):
+    __tablename__ = "night_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    event_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("events.id"), unique=True)
+    likely: Mapped[str] = mapped_column(Text)
+    detail: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class Notification(Base):
     __tablename__ = "notifications"
 

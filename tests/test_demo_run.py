@@ -73,6 +73,88 @@ def test_motor_case_scores_and_alarms(tmp_path, monkeypatch) -> None:
     reset_model_cache()
 
 
+def test_every_third_click_crosses_the_study_bar(tmp_path, monkeypatch) -> None:
+    from somnia.signals import MOTION_BAR, heart_rate_bar
+
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path}/somnia.db")
+    reset_engine()
+    reset_model_cache()
+    client = TestClient(create_app())
+    token = client.post("/api/v1/demo/session", json={"role": "patient"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    runs = []
+    for _ in range(3):
+        response = client.post("/api/v1/demo/runs", headers=headers, json={"case": "next"})
+        assert response.status_code == 200, response.text
+        runs.append(response.json())
+    assert runs[0]["active_event"] is None
+    assert runs[1]["active_event"] is None
+    assert max(item["motion_rms"] for item in runs[1]["readings"] if item["run"] == 1) < MOTION_BAR
+    alarm = runs[2]["active_event"]
+    assert alarm is not None
+    assert alarm["kind"] == "alarm"
+    motor = [item for item in runs[2]["readings"] if item["run"] == 2]
+    assert max(item["motion_rms"] for item in motor) >= MOTION_BAR
+    assert max(item["heart_rate_bpm"] for item in motor) >= heart_rate_bar()
+    assert runs[2]["motion_bar"] == MOTION_BAR
+    assert runs[2]["heart_rate_bar"] == round(heart_rate_bar(), 2)
+    with session_factory()() as db:
+        stored = db.query(FeatureWindow).all()
+        blob = json.dumps([row.features for row in stored])
+    assert "sustained_motor_event" not in blob
+    assert "next" not in blob
+    reset_engine()
+    reset_model_cache()
+
+
+def test_anomaly_log_follows_reset(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path}/somnia.db")
+    monkeypatch.delenv("VULTR_INFERENCE_API_KEY", raising=False)
+    reset_engine()
+    reset_model_cache()
+    client = TestClient(create_app())
+    token = client.post("/api/v1/demo/session", json={"role": "patient"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    for _ in range(3):
+        assert client.post("/api/v1/demo/runs", headers=headers, json={"case": "next"}).status_code == 200
+    listed = client.get("/api/v1/logs", headers=headers)
+    assert listed.status_code == 200, listed.text
+    entries = listed.json()["entries"]
+    assert len(entries) == 1
+    assert entries[0]["likely"] == "Likely a seizure-like pattern"
+    assert entries[0]["source"] == "rules"
+    assert "not a diagnosis" in entries[0]["detail"].lower()
+    cleared = client.post("/api/v1/demo/reset", headers=headers)
+    assert cleared.status_code == 200
+    assert client.get("/api/v1/logs", headers=headers).json()["entries"] == []
+    reset_engine()
+    reset_model_cache()
+
+
+def test_vultr_log_uses_the_model_label(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path}/somnia.db")
+    monkeypatch.setenv("VULTR_INFERENCE_API_KEY", "test-key")
+    monkeypatch.setattr(
+        "somnia.pipeline.describe_event",
+        lambda **_kwargs: (
+            "Likely a seizure-like pattern",
+            "The saved pattern combined movement and heart rate. This is not a diagnosis.",
+            "vultr",
+        ),
+    )
+    reset_engine()
+    reset_model_cache()
+    client = TestClient(create_app())
+    token = client.post("/api/v1/demo/session", json={"role": "patient"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    client.post("/api/v1/demo/runs", headers=headers, json={"case": "sustained_motor_event"})
+    entry = client.get("/api/v1/logs", headers=headers).json()["entries"][0]
+    assert entry["source"] == "vultr"
+    assert entry["likely"] == "Likely a seizure-like pattern"
+    reset_engine()
+    reset_model_cache()
+
+
 def test_vultr_narration_replaces_the_rule_text(tmp_path, monkeypatch) -> None:
     from somnia.narrate import clear_cache
 

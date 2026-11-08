@@ -49,7 +49,7 @@ struct WelcomeView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             Spacer()
-            Text("Somnia")
+            Text("somnia")
                 .font(.somnia(size: 44, weight: .semibold))
             Text("A nighttime prototype for one synthetic patient. It does not diagnose seizures or replace medical care.")
                 .font(.somnia(.body))
@@ -89,6 +89,8 @@ struct PatientTabs: View {
                 .tabItem { Label("Home", systemImage: "moon.stars.fill") }
             InsightsView(model: model)
                 .tabItem { Label("Insights", systemImage: "waveform.path.ecg") }
+            LogView(model: model)
+                .tabItem { Label("Log", systemImage: "list.bullet.rectangle") }
             ProfileView(model: model)
                 .tabItem { Label("Profile", systemImage: "person.fill") }
         }
@@ -127,7 +129,7 @@ struct CaregiverHome: View {
                                 .font(.somnia(.title2, weight: .semibold))
                                 .foregroundStyle(Night.danger)
                             Text("Avery has not turned off a possible seizure-like event.")
-                            Text("If it stays on, the caregiver and physician are the people Somnia says it will notify.")
+                            Text("If it stays on, the caregiver and physician are the people somnia says it will notify.")
                                 .foregroundStyle(Night.muted)
                             if let score = alarm.scorePeak {
                                 Text(String(format: "Peak anomaly score %.2f", score))

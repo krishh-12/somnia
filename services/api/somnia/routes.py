@@ -8,12 +8,13 @@ from sqlalchemy.orm import Session
 
 from somnia.db import db_session
 from somnia.insights import build_insights
-from somnia.models import Event, FeatureWindow
+from somnia.models import Event, FeatureWindow, NightLog
 from somnia.pipeline import (
     FEEDBACK_LABELS,
     acknowledge,
     active_alarm,
     aware,
+    ensure_logs,
     ensure_ready,
     compounded_readings,
     latest_session,
@@ -23,7 +24,7 @@ from somnia.pipeline import (
     run_case,
     user_for_token,
 )
-from somnia.signals import CASES
+from somnia.signals import CASES, MOTION_BAR, case_for_click, heart_rate_bar
 
 router = APIRouter(prefix="/api/v1")
 
@@ -85,6 +86,8 @@ class LiveOut(BaseModel):
     wearable_label: str
     baseline_hr: float
     model_threshold: float | None
+    motion_bar: float = MOTION_BAR
+    heart_rate_bar: float = 0
     demo_case: str | None
     synthetic: bool
     readings: list[ReadingOut]
@@ -93,6 +96,21 @@ class LiveOut(BaseModel):
 
 class EventList(BaseModel):
     events: list[EventOut]
+
+
+class LogOut(BaseModel):
+    id: uuid.UUID
+    event_id: uuid.UUID
+    at: datetime
+    likely: str
+    detail: str
+    source: str
+    kind: str
+    synthetic: bool
+
+
+class LogList(BaseModel):
+    entries: list[LogOut]
 
 
 class FeedbackOut(BaseModel):
@@ -196,6 +214,8 @@ def snapshot(db: Session) -> LiveOut:
         wearable_label="Wearable import not connected",
         baseline_hr=patient.baseline_hr,
         model_threshold=None if _model is None else _model.threshold,
+        motion_bar=MOTION_BAR,
+        heart_rate_bar=round(heart_rate_bar(patient.baseline_hr), 2),
         demo_case=None if session is None else session.demo_case,
         synthetic=True if session is None else session.synthetic,
         readings=[_reading(index, run, window) for index, (run, window) in enumerate(rows)],
@@ -226,9 +246,18 @@ def demo_run(body: RunBody, user=Depends(current_user), db: Session = Depends(db
 
     if user.role != "patient":
         raise HTTPException(status_code=403, detail="Only the patient demo view runs a test")
-    if body.case not in CASES:
+    if body.case == "next":
+        from sqlalchemy import func
+
+        from somnia.models import MonitoringSession
+
+        completed = db.scalar(select(func.count()).select_from(MonitoringSession)) or 0
+        chosen = case_for_click(int(completed))
+    elif body.case not in CASES:
         raise HTTPException(status_code=422, detail="Unknown test case")
-    run_case(db, body.case)
+    else:
+        chosen = body.case
+    run_case(db, chosen)
     return snapshot(db)
 
 
@@ -245,6 +274,29 @@ def demo_reset(user=Depends(current_user), db: Session = Depends(db_session)) ->
 @router.get("/insights", response_model=InsightsOut)
 def insights(_user=Depends(current_user), db: Session = Depends(db_session)) -> InsightsOut:
     return InsightsOut(**build_insights(db))
+
+
+@router.get("/logs", response_model=LogList)
+def logs(_user=Depends(current_user), db: Session = Depends(db_session)) -> LogList:
+    ensure_logs(db)
+    rows = db.execute(
+        select(NightLog, Event).join(Event, Event.id == NightLog.event_id).order_by(Event.started_at.desc())
+    ).all()
+    return LogList(
+        entries=[
+            LogOut(
+                id=log.id,
+                event_id=log.event_id,
+                at=aware(event.started_at),
+                likely=log.likely,
+                detail=log.detail,
+                source=log.source,
+                kind=event.kind,
+                synthetic=event.synthetic,
+            )
+            for log, event in rows
+        ]
+    )
 
 
 @router.get("/events", response_model=EventList)

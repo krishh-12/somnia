@@ -1,13 +1,13 @@
 import SwiftUI
 
 extension Font {
-    /// New York, the system serif. It reads softer than the default interface face and fits a night app.
+    /// SF Rounded. The round terminals feel more inviting than a serif in a night app.
     static func somnia(_ style: Font.TextStyle, weight: Font.Weight = .regular) -> Font {
-        .system(style, design: .serif).weight(weight)
+        .system(style, design: .rounded).weight(weight)
     }
 
     static func somnia(size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .system(size: size, weight: weight, design: .serif)
+        .system(size: size, weight: weight, design: .rounded)
     }
 }
 
